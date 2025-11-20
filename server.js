@@ -3,12 +3,9 @@ const app = express();
 const http = require('http').createServer(app);
 const { Server } = require("socket.io");
 
-// Настройка CORS для Render
+// Настройка для Render
 const io = new Server(http, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 app.use(express.static('public'));
@@ -18,7 +15,6 @@ const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 
-// --- БАЛАНС ---
 const PLAYER_SPEED = 2.0;
 const GHOST_SPEED_NORMAL = 1.5;
 const GHOST_SPEED_FRIGHTENED = 0.8;
@@ -88,8 +84,7 @@ io.on('connection', (socket) => {
         joinRoom(socket, roomId, nickname);
     });
     socket.on('joinLobby', ({ code, nickname }) => {
-        if(!code) return;
-        const roomId = code.toUpperCase();
+        const roomId = (code || "").toUpperCase();
         if (lobbies[roomId]) joinRoom(socket, roomId, nickname);
         else socket.emit('errorMsg', 'Lobby not found');
     });
@@ -172,7 +167,7 @@ function updateGamePhysics(game) {
     const playerIds = Object.keys(game.players);
     for (let id of playerIds) {
         let p = game.players[id];
-        if(!p || !p.alive) continue;
+        if(!p.alive) continue;
         if(p.invulnTimer > 0) p.invulnTimer--;
         if(p.pvpTimer > 0) p.pvpTimer--;
         const gx = Math.round(p.x / TILE_SIZE), gy = Math.round(p.y / TILE_SIZE), px = gx * TILE_SIZE, py = gy * TILE_SIZE;
