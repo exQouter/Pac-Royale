@@ -177,17 +177,17 @@
 
     if(urlParams.has('code')) document.getElementById('lobby-code-input').value = urlParams.get('code');
 
-    // --- ИСПОЛЬЗУЕМ GITHUB PAGES (Это работает как обычный сайт, без блокировок) ---
-    const BASE_URL = "https://krisrak.github.io/pacman-canvas/sounds/";
+    // --- ССЫЛКИ С CDN JSDELIVR (Точно работают) ---
+    const BASE_SOUND_URL = 'https://cdn.jsdelivr.net/gh/masonicGIT/pacman@master/sounds/';
     
     const AUDIO_FILES = [
-        {key: 'intro',    src: BASE_URL + 'game-start.mp3'},
-        {key: 'waka',     src: BASE_URL + 'eating.short.mp3'},
-        {key: 'eatGhost', src: BASE_URL + 'eat-ghost.mp3'},
-        {key: 'death',    src: BASE_URL + 'die.mp3'},
-        {key: 'eatFruit', src: BASE_URL + 'eat-fruit.mp3'},
-        {key: 'siren',    src: BASE_URL + 'siren.mp3'},
-        {key: 'power',    src: BASE_URL + 'extra-life.mp3'} // Используем этот звук как замену, так как power-pellet там нет
+        {key: 'intro',    src: BASE_SOUND_URL + 'intro.mp3'},
+        {key: 'waka',     src: BASE_SOUND_URL + 'munch.mp3'},
+        {key: 'eatGhost', src: BASE_SOUND_URL + 'eatghost.mp3'},
+        {key: 'death',    src: BASE_SOUND_URL + 'death.mp3'},
+        {key: 'eatFruit', src: BASE_SOUND_URL + 'eatfruit.mp3'},
+        {key: 'siren',    src: BASE_SOUND_URL + 'siren.mp3'},
+        {key: 'power',    src: BASE_SOUND_URL + 'power_pellet.mp3'} 
     ];
 
     const sounds = {};
@@ -197,16 +197,16 @@
         AUDIO_FILES.forEach(file => {
             sounds[file.key] = new Howl({
                 src: [file.src],
-                html5: true, 
+                html5: false, // ВАЖНО: False = Web Audio API (решает ошибку Pool exhausted)
                 preload: true,
                 volume: 0.5,
                 onload: () => { 
                     loadedCount++; 
-                    console.log("Loaded:", file.key); 
+                    console.log(`Loaded: ${file.key}`);
                     updateLoader(); 
                 },
                 onloaderror: (id, err) => { 
-                    console.warn(`Audio error ${file.key}`, err); 
+                    console.warn(`Audio failed ${file.key}`, err); 
                     loadedCount++; 
                     updateLoader(); 
                 }
@@ -214,6 +214,7 @@
         });
     }
 
+    // Разблокировка аудио
     const unlockEvents = ['click', 'keydown', 'touchstart'];
     function unlockAudio() {
         if (Howler.ctx && Howler.ctx.state !== 'running') {
@@ -239,14 +240,16 @@
     }
 
     initAudio();
-    // Страховка на случай лагов сети
-    setTimeout(() => { if(loadedCount < AUDIO_FILES.length) { loadedCount=AUDIO_FILES.length; updateLoader(); }}, 6000);
-
+    setTimeout(() => { if(loadedCount < AUDIO_FILES.length) { loadedCount=AUDIO_FILES.length; updateLoader(); }}, 7000);
 
     function playSfx(n) { 
         if(sounds[n]) {
-            if(n === 'waka') { if(!sounds[n].playing()) sounds[n].play(); } 
-            else { sounds[n].play(); }
+            if(n === 'waka') {
+                // Для waka-waka не перезапускаем, если уже играет, чтобы не было "каши"
+                if(!sounds[n].playing()) sounds[n].play(); 
+            } else {
+                sounds[n].play();
+            }
         }
     }
 

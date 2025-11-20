@@ -3,7 +3,7 @@ const app = express();
 const http = require('http').createServer(app);
 const { Server } = require("socket.io");
 
-// Настройка Socket.io с CORS (важно для Render)
+// Настройка CORS для Render
 const io = new Server(http, {
     cors: {
         origin: "*",
