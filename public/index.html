@@ -29,6 +29,7 @@
         /* CONTROLS */
         button { background: #ffcc00; padding: 15px; font-family: inherit; cursor: pointer; border: 2px solid white; margin-top: 15px; text-transform: uppercase; box-shadow: 4px 4px 0 #b8860b; width: 100%; font-weight: bold; font-size: 12px; box-sizing: border-box; }
         button:hover { transform: translate(-1px, -1px); background: #ffe066; }
+        button:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #b8860b; }
         button:disabled { background: #555; color: #888; cursor: not-allowed; box-shadow: none; transform: none; }
         input { background: #111; border: 2px solid #555; color: #ffcc00; font-family: inherit; padding: 15px; text-align: center; text-transform: uppercase; font-size: 16px; display: block; margin: 10px auto; width: 80%; box-sizing: border-box; }
 
@@ -61,7 +62,7 @@
         <h1 style="color:#ffcc00; font-size:36px; margin-bottom:40px; text-shadow: 4px 4px 0 #b8860b;">PAC-ROYALE</h1>
         <p style="font-size:10px; color:#aaa; margin-bottom:20px;">ONLINE BATTLE</p>
         <button style="width: 200px; margin: 0 auto; display: block;" onclick="enterMenu()">PLAY</button>
-        <button id="scoreboard-btn" onclick="toggleBoard()">🏆 SCOREBOARD</button>
+        <button id="scoreboard-btn" onclick="toggleBoard(); uiClick()">🏆 SCOREBOARD</button>
     </div>
 
     <!-- 2. SETUP MENU -->
@@ -73,25 +74,25 @@
         <div class="menu-grid">
             <div class="menu-col">
                 <div class="menu-label">NEW GAME</div>
-                <button onclick="createLobby()">CREATE LOBBY</button>
+                <button onclick="createLobby(); uiClick()">CREATE LOBBY</button>
             </div>
             <div class="menu-divider"></div>
             <div class="menu-col">
                 <div class="menu-label">EXISTING GAME</div>
                 <div style="display: flex; flex-direction: column; gap: 5px; width: 100%;">
                     <input type="text" id="lobby-code-input" placeholder="CODE" maxlength="5" style="width: 100%;">
-                    <button onclick="joinLobby()">JOIN</button>
+                    <button onclick="joinLobby(); uiClick()">JOIN</button>
                 </div>
             </div>
         </div>
         <div id="menu-error" class="error-msg"></div>
-        <button style="background: #444; border-color: #666; margin-top:30px; width:auto;" onclick="backToIntro()">BACK</button>
+        <button style="background: #444; border-color: #666; margin-top:30px; width:auto;" onclick="backToIntro(); uiClick()">BACK</button>
     </div>
 
     <!-- 3. LOBBY -->
     <div id="lobby-screen" class="screen" style="min-width: 600px;">
         <h2 style="font-size:16px; color:#aaa;">LOBBY ROOM</h2>
-        <div class="lobby-code" id="lobby-code-display" onclick="copyLink()">CODE: ????</div>
+        <div class="lobby-code" id="lobby-code-display" onclick="copyLink(); uiClick()">CODE: ????</div>
         <div style="font-size:8px; color:#666; margin-bottom:20px;">(CLICK CODE TO COPY INVITE LINK)</div>
         <div class="lobby-container">
             <div class="lobby-slot" id="slot-0"><div class="slot-label">PLAYER 1</div><div class="waiting-anim">WAITING...</div></div>
@@ -100,7 +101,7 @@
             <div class="lobby-slot" id="slot-3"><div class="slot-label">PLAYER 4</div><div class="waiting-anim">WAITING...</div></div>
         </div>
         <div style="width: 50%; margin: 0 auto;">
-            <button id="start-game-btn" onclick="startGame()" style="display:none; background:#00FF00; color:black;">START GAME</button>
+            <button id="start-game-btn" onclick="startGame(); uiClick()" style="display:none; background:#00FF00; color:black;">START GAME</button>
         </div>
         <div id="waiting-msg" style="font-size:10px; color:#FFFF00; margin-top:20px;">WAITING FOR HOST...</div>
     </div>
@@ -109,7 +110,7 @@
     <div id="board-screen" class="screen">
         <h1 style="color:#ffcc00;">TOP 10</h1>
         <table id="board-table" style="width:100%; color:#ccc; font-size:10px; margin-top:20px;"></table>
-        <button onclick="toggleBoard()">CLOSE</button>
+        <button onclick="toggleBoard(); uiClick()">CLOSE</button>
     </div>
 
     <div id="countdown-display">3</div>
@@ -129,7 +130,7 @@
     <div id="game-over" class="screen">
         <h1 style="color:red;">GAME OVER</h1>
         <p id="final-score" style="color:white; font-size:14px; margin:20px 0;"></p>
-        <button onclick="submitScore()">SUBMIT</button>
+        <button onclick="submitScore(); uiClick()">SUBMIT</button>
     </div>
     <div id="host-left-screen" class="screen" style="z-index:200;">
         <h1 style="color:red;">ROOM CLOSED</h1>
@@ -158,60 +159,55 @@
             constructor() {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.masterGain = this.ctx.createGain();
-                this.masterGain.gain.value = 0.15; // Общая громкость (тише)
+                this.masterGain.gain.value = 0.15; // Общая громкость
                 this.masterGain.connect(this.ctx.destination);
                 this.sirenOsc = null; 
             }
             resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
             
-            // Вспомогательная функция для создания мягкого звука с фильтром
             createSoftOscillator(type, freq, startTime) {
                 const osc = this.ctx.createOscillator();
                 osc.type = type;
                 osc.frequency.setValueAtTime(freq, startTime);
-
-                // Фильтр срезает резкий "звон"
                 const filter = this.ctx.createBiquadFilter();
                 filter.type = 'lowpass';
-                filter.frequency.value = 1000; // Срезаем всё выше 1000Гц
-
+                filter.frequency.value = 1000; 
                 const gain = this.ctx.createGain();
-                
                 osc.connect(filter);
                 filter.connect(gain);
                 gain.connect(this.masterGain);
-                
                 return { osc, gain };
             }
 
-            playWaka() {
-                // Мягкий "вомп-вомп"
+            playClick() {
+                // Короткий 8-битный клик для UI
                 const t = this.ctx.currentTime;
-                // Используем синусоиду (самый мягкий звук)
+                const { osc, gain } = this.createSoftOscillator('square', 800, t);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+                osc.start(t); osc.stop(t + 0.1);
+            }
+
+            playWaka() {
+                const t = this.ctx.currentTime;
                 const osc = this.ctx.createOscillator();
                 osc.type = 'sine'; 
                 osc.frequency.setValueAtTime(150, t);
-                osc.frequency.linearRampToValueAtTime(50, t + 0.15); // Резко вниз
-
+                osc.frequency.linearRampToValueAtTime(50, t + 0.15); 
                 const gain = this.ctx.createGain();
                 gain.gain.setValueAtTime(0, t);
-                gain.gain.linearRampToValueAtTime(0.8, t + 0.02); // Атака
-                gain.gain.linearRampToValueAtTime(0, t + 0.15); // Затухание
-                
+                gain.gain.linearRampToValueAtTime(0.8, t + 0.02); 
+                gain.gain.linearRampToValueAtTime(0, t + 0.15); 
                 osc.connect(gain); gain.connect(this.masterGain);
                 osc.start(t); osc.stop(t + 0.15);
             }
 
             playEat() {
-                // Мягкий хруст (Filtered Square)
                 const t = this.ctx.currentTime;
                 const { osc, gain } = this.createSoftOscillator('square', 300, t);
-                
                 osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
-                
                 gain.gain.setValueAtTime(0.3, t);
                 gain.gain.linearRampToValueAtTime(0, t + 0.1);
-                
                 osc.start(t); osc.stop(t + 0.1);
             }
 
@@ -229,7 +225,7 @@
 
             playIntro() {
                 const t = this.ctx.currentTime;
-                // Более низкие ноты, приятнее уху
+                // Мелодия старта игры
                 const notes = [246, 493, 369, 311, 493, 369, 311, 493, 369, 311, 246];
                 let time = t;
                 notes.forEach(freq => {
@@ -246,25 +242,22 @@
                 const t = this.ctx.currentTime;
                 
                 this.sirenOsc = this.ctx.createOscillator();
-                // Синусоида для обычной, Треугольник для Power (оба мягкие)
                 this.sirenOsc.type = type === 'power' ? 'triangle' : 'sine';
                 
-                // Низкие частоты (гул, а не писк)
                 const baseFreq = type === 'power' ? 300 : 150;
                 this.sirenOsc.frequency.setValueAtTime(baseFreq, t);
                 
-                // Очень медленная модуляция (вау-вау)
                 const lfo = this.ctx.createOscillator();
                 lfo.frequency.value = type === 'power' ? 5 : 1.5;
                 const lfoGain = this.ctx.createGain();
-                lfoGain.gain.value = 20; // Амплитуда вибрации
+                lfoGain.gain.value = 20; 
                 
                 lfo.connect(lfoGain);
                 lfoGain.connect(this.sirenOsc.frequency);
                 lfo.start(t);
                 
                 const mainGain = this.ctx.createGain();
-                mainGain.gain.value = 0.1; // Тихая фоновая
+                mainGain.gain.value = 0.1; 
                 
                 this.sirenOsc.connect(mainGain);
                 mainGain.connect(this.masterGain);
@@ -296,9 +289,14 @@
         const synth = new PacmanSynth();
 
         // --- UI ФУНКЦИИ ---
+        function uiClick() {
+            synth.resume();
+            synth.playClick();
+        }
+
         function enterMenu() {
             synth.resume(); 
-            synth.playIntro();
+            synth.playClick(); // Только клик, без музыки
             document.getElementById('intro-screen').classList.remove('visible');
             document.getElementById('menu-screen').classList.add('visible');
         }
@@ -364,10 +362,16 @@
         socket.on('roomClosed', () => { document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); document.getElementById('host-left-screen').classList.add('visible'); synth.stopSiren(); });
         
         socket.on('gameStarted', () => { 
+            // СКРЫВАЕМ МЕНЮ
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
             canvas.style.display = 'block'; 
             isJoined = true; 
-            setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 3500); 
+            
+            // ИГРАЕМ МУЗЫКУ СТАРТА
+            synth.playIntro();
+
+            // Сирену включаем после интро (через 4 секунды)
+            setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 4000); 
         });
 
         socket.on('sfx', t => { 
@@ -416,8 +420,15 @@
             else if (s.countdown > -1) { cdEl.style.display = 'block'; cdEl.innerText = "GO!"; } 
             else { cdEl.style.display = 'none'; }
             
-            if(s.frightenedTimer > 0) synth.checkSirenUpdate('power');
-            else synth.checkSirenUpdate('normal');
+            // Проверяем состояние сирены (обычная или power mode)
+            if(s.frightenedTimer > 0) {
+                synth.checkSirenUpdate('power');
+            } else {
+                // Сирена включается только если интро уже прошло
+                if (Date.now() - s.startTime > 4000 || s.countdown < 0) {
+                    synth.checkSirenUpdate('normal');
+                }
+            }
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const camY = s.cameraY;
