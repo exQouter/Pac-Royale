@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pac-Royale V45</title>
+    <title>Pac-Royale Final UI</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
     <style>
         body { margin: 0; background: #050505; color: white; font-family: 'Press Start 2P'; display: flex; flex-direction: row; align-items: center; justify-content: center; height: 100vh; user-select: none; overflow: hidden; }
         
-        /* UI PANELS */
+        /* UI LAYOUT */
         .ui-column { display: flex; flex-direction: column; gap: 20px; justify-content: center; height: 100%; margin: 0 15px; }
         .side-panel { width: 120px; height: 300px; background: #111; border: 3px solid #333; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; opacity: 0.3; transition: opacity 0.3s; box-shadow: 5px 5px 0px #000; }
         .side-panel.active { opacity: 1; border-color: #fff; box-shadow: 8px 8px 0px #000; transform: translate(-2px, -2px); }
@@ -27,21 +27,25 @@
         .visible { display: block !important; }
         #countdown-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 100px; color: #ffcc00; text-shadow: 5px 5px 0 #000; z-index: 50; pointer-events: none; display: none; }
 
-        /* LOADER BAR */
+        /* LOADER */
         #loader-bar-container { width: 80%; height: 20px; border: 2px solid white; margin: 30px auto; padding: 2px; }
         #loader-bar-fill { height: 100%; width: 0%; background-color: #ffcc00; transition: width 0.2s; }
 
-        /* UI CONTROLS */
+        /* BUTTONS & INPUTS */
         button { background: #ffcc00; padding: 15px; font-family: inherit; cursor: pointer; border: 2px solid white; margin-top: 15px; text-transform: uppercase; box-shadow: 4px 4px 0 #b8860b; width: 100%; font-weight: bold; font-size: 12px; box-sizing: border-box; }
         button:hover { transform: translate(-1px, -1px); background: #ffe066; }
         button:disabled { background: #555; color: #888; cursor: not-allowed; box-shadow: none; transform: none; }
         input { background: #111; border: 2px solid #555; color: #ffcc00; font-family: inherit; padding: 15px; text-align: center; text-transform: uppercase; font-size: 16px; display: block; margin: 10px auto; width: 80%; box-sizing: border-box; }
 
+        /* MENU GRID ALIGNMENT FIX */
         .menu-grid { display: grid; grid-template-columns: 1fr 2px 1fr; gap: 20px; margin-top: 20px; align-items: start; }
-        .menu-col { display: flex; flex-direction: column; gap: 10px; }
-        .menu-divider { background: #333; height: 100%; min-height: 150px; }
-        .menu-label { font-size: 10px; color: #888; margin-bottom: 5px; text-align: center; }
-        .spacer-input { height: 53px; } 
+        .menu-col { display: flex; flex-direction: column; gap: 0px; /* Сброс гапа, контролируем маржинами */ }
+        .menu-divider { background: #333; height: 100%; min-height: 160px; }
+        .menu-label { font-size: 10px; color: #888; margin-bottom: 10px; text-align: center; height: 15px;}
+        
+        /* Специальная распорка, чтобы кнопка слева была на той же высоте, что и справа под инпутом */
+        /* Высота инпута (примерно 52px) + его маржины (10px) */
+        .spacer-input { height: 52px; margin: 10px 0; display: block; }
 
         .lobby-container { display: flex; gap: 15px; justify-content: center; margin: 30px 0; }
         .lobby-slot { width: 100px; height: 140px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
@@ -55,19 +59,21 @@
         .lobby-code { font-size: 24px; color: #00FFFF; margin: 10px 0; cursor: pointer; border: 1px dashed #444; padding: 10px; }
         .error-msg { color: red; font-size: 10px; margin-top: 15px; text-align: center; }
         #scoreboard-btn { background: #444; color: white; font-size: 10px; width: 200px; margin: 20px auto; border-color: #666; box-shadow: none; display: block; }
+        
+        /* HIDE TOP UI */
         #global-ui { display: none !important; }
     </style>
 </head>
 <body>
 
-    <!-- 1. PRELOADER (No Buttons) -->
+    <!-- 1. PRELOADER -->
     <div id="loader-screen" class="screen visible">
         <h1 style="color:#ffcc00; margin-bottom:40px;">LOADING...</h1>
         <div id="loader-bar-container"><div id="loader-bar-fill"></div></div>
-        <p id="load-status" style="font-size:10px; color:#aaa;">DOWNLOADING ASSETS</p>
+        <p id="load-status" style="font-size:10px; color:#aaa;">DOWNLOADING RESOURCES</p>
     </div>
 
-    <!-- 2. INTRO MENU -->
+    <!-- 2. INTRO -->
     <div id="intro-screen" class="screen">
         <h1 style="color:#ffcc00; font-size:36px; margin-bottom:40px; text-shadow: 4px 4px 0 #b8860b;">PAC-ROYALE</h1>
         <p style="font-size:10px; color:#aaa; margin-bottom:20px;">ONLINE BATTLE</p>
@@ -84,12 +90,15 @@
         </div>
 
         <div class="menu-grid">
+            <!-- LEFT: CREATE -->
             <div class="menu-col">
                 <div class="menu-label">NEW GAME</div>
+                <!-- Распорка такой же высоты как инпут справа, чтобы кнопка съехала вниз -->
                 <div class="spacer-input"></div>
-                <button onclick="createLobby()" style="margin-top: 0;">CREATE LOBBY</button>
+                <button onclick="createLobby()" style="margin-top: 5px;">CREATE LOBBY</button>
             </div>
             <div class="menu-divider"></div>
+            <!-- RIGHT: JOIN -->
             <div class="menu-col">
                 <div class="menu-label">EXISTING GAME</div>
                 <input type="text" id="lobby-code-input" placeholder="CODE" maxlength="5">
@@ -157,7 +166,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         if(urlParams.has('code')) document.getElementById('lobby-code-input').value = urlParams.get('code');
 
-        // --- SOUNDS ---
+        // --- AUDIO ---
         const AUDIO_FILES = [
             {key: 'intro', src: 'https://raw.githubusercontent.com/masonicGIT/pacman/master/sounds/intro.mp3'},
             {key: 'waka', src: 'https://raw.githubusercontent.com/masonicGIT/pacman/master/sounds/munch.mp3'},
@@ -188,16 +197,15 @@
             document.getElementById('load-status').innerText = `DOWNLOADING ${pct}%`;
             
             if(loadedCount >= AUDIO_FILES.length) {
-                // AUTO SWITCH TO INTRO
                 setTimeout(() => {
                     document.getElementById('loader-screen').classList.remove('visible');
                     document.getElementById('intro-screen').classList.add('visible');
-                }, 800);
+                }, 500);
             }
         }
         initAudio();
-        // Fallback if files don't load
-        setTimeout(() => { if(loadedCount < AUDIO_FILES.length) { loadedCount=AUDIO_FILES.length; updateLoader(); }}, 5000);
+        // Fallback
+        setTimeout(() => { if(loadedCount < AUDIO_FILES.length) { loadedCount=AUDIO_FILES.length; updateLoader(); }}, 4000);
 
         let currentBg = null;
 
@@ -210,9 +218,8 @@
         }
         function stopBg() { if(currentBg && sounds[currentBg]) sounds[currentBg].stop(); currentBg=null; }
 
-        // --- UI LOGIC ---
+        // --- UI ---
         function enterMenu() {
-            // THIS BUTTON PRESS ACTIVATES AUDIO FOR BROWSER
             playSfx('intro'); 
             document.getElementById('intro-screen').classList.remove('visible');
             document.getElementById('menu-screen').classList.add('visible');
@@ -231,8 +238,14 @@
         function toggleBoard() {
             const el = document.getElementById('board-screen');
             const intro = document.getElementById('intro-screen');
-            if(el.classList.contains('visible')) { el.classList.remove('visible'); intro.classList.add('visible'); }
-            else { intro.classList.remove('visible'); el.classList.add('visible'); renderBoard(); }
+            if(el.classList.contains('visible')) {
+                el.classList.remove('visible');
+                intro.classList.add('visible');
+            } else {
+                intro.classList.remove('visible');
+                el.classList.add('visible');
+                renderBoard();
+            }
         }
         function renderBoard() {
             const t = document.getElementById('board-table'); t.innerHTML = '<tr><th>RANK</th><th>NAME</th><th>SCORE</th></tr>';
@@ -256,7 +269,7 @@
             location.reload();
         }
 
-        // --- EVENTS ---
+        // --- SOCKET ---
         socket.on('lobbyUpdate', d => {
             document.getElementById('menu-screen').classList.remove('visible');
             document.getElementById('lobby-screen').classList.add('visible');
@@ -360,18 +373,12 @@
             popups.forEach(p => {
                 p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - camY);
             });
-            // DEATH ZONE
+            
             const dzY = canvas.height - 40;
             const time = Date.now()/200;
             const gCols = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
-            for(let i=-1; i<22; i++) {
-                const waveY = Math.sin(time + i*0.5)*5;
-                drawGhost(ctx, i*30, dzY + waveY, gCols[i%4], 0, -1, false);
-            }
-            for(let i=-1; i<22; i++) {
-                const waveY = Math.sin(time + i*0.5 + 2)*5;
-                drawGhost(ctx, i*30-15, dzY + 15 + waveY, gCols[(i+2)%4], 0, -1, false);
-            }
+            for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5)*5; drawGhost(ctx, i*30, dzY + waveY, gCols[i%4], 0, -1, false); }
+            for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5 + 2)*5; drawGhost(ctx, i*30-15, dzY + 15 + waveY, gCols[(i+2)%4], 0, -1, false); }
         });
     </script>
 </body>
