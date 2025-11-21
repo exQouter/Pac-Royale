@@ -49,7 +49,6 @@ function loadLeaderboard() {
 
 function saveLeaderboard() {
     if (saveTimeout) clearTimeout(saveTimeout);
-    // Пишем на диск не чаще чем раз в 5 секунд, чтобы не убить диск
     saveTimeout = setTimeout(() => {
         fs.writeFile(DATA_FILE, JSON.stringify(globalLeaderboard, null, 2), (err) => {
             if (err) console.error('Save error:', err);
@@ -81,12 +80,11 @@ function createGame(roomId) {
         frightenedTimer: 0, nextGhostSpawn: -400, 
         patternRowIndex: 0, currentPattern: null, 
         isRunning: false, hostId: null, countdown: 0, startTime: 0,
-        // Оптимизация: храним изменения за тик
         changes: { removedDots: [], newRows: {} } 
     };
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
-    game.changes.newRows = {}; // Очистить инициализацию
+    game.changes.newRows = {}; 
     return game;
 }
 
@@ -111,7 +109,7 @@ function generateRow(game, yIndex) {
         else { row[i] = getContent(); row[right] = getContent(); }
     }
     game.rows[yIndex] = row;
-    game.changes.newRows[yIndex] = row; // Помечаем для отправки
+    game.changes.newRows[yIndex] = row;
 
     const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 45;
     for (let k in game.rows) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; }
@@ -156,10 +154,7 @@ io.on('connection', (socket) => {
         currentRoom = roomId;
         socket.join(roomId);
         socket.emit('init', { id: socket.id, colorIdx: myIdx });
-        
-        // Отправляем ПОЛНУЮ карту при подключении
         socket.emit('fullMap', game.rows);
-        
         io.to(roomId).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: roomId });
     }
 
@@ -168,7 +163,6 @@ io.on('connection', (socket) => {
             lobbies[currentRoom].isRunning = true;
             lobbies[currentRoom].countdown = 3;
             lobbies[currentRoom].startTime = Date.now();
-            // Всем отправить свежую карту перед стартом
             io.to(currentRoom).emit('fullMap', lobbies[currentRoom].rows);
             io.to(currentRoom).emit('gameStarted');
         }
@@ -215,35 +209,16 @@ setInterval(() => {
         
         if (game.countdown > -1) game.countdown -= 1/60;
         
-        // Сброс изменений за этот тик
         game.changes = { removedDots: [], newRows: {} };
         
         if (game.countdown > 0) {
-            io.to(roomId).emit('state', { 
-                t: Date.now(), // Таймстемп для интерполяции
-                camY: game.cameraY, 
-                players: game.players, 
-                ghosts: game.ghosts, 
-                ft: game.frightenedTimer, 
-                cd: game.countdown, 
-                st: game.startTime,
-                changes: game.changes 
-            });
+            io.to(roomId).emit('state', { t: Date.now(), camY: game.cameraY, players: game.players, ghosts: game.ghosts, ft: game.frightenedTimer, cd: game.countdown, st: game.startTime, changes: game.changes });
             continue;
         }
         
         updateGamePhysics(game);
         
-        io.to(roomId).emit('state', { 
-            t: Date.now(),
-            camY: game.cameraY, 
-            players: game.players, 
-            ghosts: game.ghosts, 
-            ft: game.frightenedTimer, 
-            cd: game.countdown, 
-            st: game.startTime,
-            changes: game.changes // ОТПРАВЛЯЕМ ТОЛЬКО ИЗМЕНЕНИЯ
-        });
+        io.to(roomId).emit('state', { t: Date.now(), camY: game.cameraY, players: game.players, ghosts: game.ghosts, ft: game.frightenedTimer, cd: game.countdown, st: game.startTime, changes: game.changes });
     }
 }, 1000 / 60);
 
@@ -290,7 +265,6 @@ function updateGamePhysics(game) {
         
         const tile = getTile(game, gx, gy);
         if(tile > TILE.WALL) {
-            // Записываем удаление тайла в changes
             game.rows[gy][gx] = TILE.EMPTY;
             game.changes.removedDots.push({x: gx, y: gy});
 
@@ -373,7 +347,9 @@ function finalizeDeath(game, p) {
         const cy = Math.floor((game.cameraY + 400) / TILE_SIZE); 
         let foundX = 10;
         for(let x=2; x<MAP_WIDTH-2; x++) if(getTile(game, x, cy) !== TILE.WALL) { foundX = x; break; } 
-        p.x = foundX * TILE_SIZE; p.y = cy * TILE_SIZE; p.vx = 0; p.vy = 0; p.invulnTimer = 120; p.pvpTimer = 0; p.deathTimer = 0; game.gameSpeed *= 0.7;
+        p.x = foundX * TILE_SIZE; p.y = cy * TILE_SIZE; p.vx = 0; p.vy = 0; p.invulnTimer = 120; p.pvpTimer = 0; p.deathTimer = 0; 
+        // ФИКС: Скорость не падает ниже 0.8
+        game.gameSpeed = Math.max(CAM_SPEED_START, game.gameSpeed * 0.7);
     } else { p.alive = false; io.to(p.id).emit('gameOver', p.score); }
 }
 

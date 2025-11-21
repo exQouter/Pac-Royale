@@ -45,7 +45,7 @@
 <body>
     <div id="intro-screen" class="screen visible">
         <h1 style="color:#ffcc00; font-size:36px; margin-bottom:40px; text-shadow: 4px 4px 0 #b8860b;">PAC-ROYALE</h1>
-        <p style="font-size:10px; color:#aaa; margin-bottom:20px;">V2.0 (OPTIMIZED)</p>
+        <p style="font-size:10px; color:#aaa; margin-bottom:20px;">V2.1 (STABLE)</p>
         <button style="width: 200px; margin: 0 auto; display: block;" onclick="enterMenu()">PLAY</button>
         <button id="scoreboard-btn" onclick="toggleBoard(); uiClick()">🏆 SCOREBOARD</button>
     </div>
@@ -102,14 +102,12 @@
         let leaderboardData = []; 
         let deathZoneY = 1000;
         
-        // --- STATE MANAGEMENT ---
-        let localRows = {}; // КЛИЕНТСКАЯ КАРТА
+        let localRows = {}; 
         let prevState = null;
         let currState = null;
 
         if(urlParams.has('code')) document.getElementById('lobby-code-input').value = urlParams.get('code');
 
-        // --- AUDIO SYNTH ---
         class PacmanSynth {
             constructor() { this.ctx = new (window.AudioContext||window.webkitAudioContext)(); this.masterGain = this.ctx.createGain(); this.masterGain.gain.value = 0.15; this.masterGain.connect(this.ctx.destination); this.sirenOsc = null; }
             resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
@@ -149,18 +147,13 @@
             isJoined = true; 
             synth.playIntro(); 
             setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 4000); 
-            requestAnimationFrame(renderLoop); // Запуск рендера
+            requestAnimationFrame(renderLoop);
         });
 
-        // ПОЛУЧЕНИЕ ПОЛНОЙ КАРТЫ
         socket.on('fullMap', (rows) => {
             localRows = rows;
-            // Чистим старое
             const keys = Object.keys(localRows).map(Number).sort((a,b)=>a-b);
-            if (keys.length > 100) {
-                 // Оставляем только последние 80 рядов
-                 for(let i=0; i<keys.length-80; i++) delete localRows[keys[i]];
-            }
+            if (keys.length > 100) { for(let i=0; i<keys.length-80; i++) delete localRows[keys[i]]; }
         });
 
         socket.on('sfx', t => { if(!isJoined) return; if (t === 'waka') synth.playWaka(); else if (t === 'eatGhost' || t === 'eatFruit') synth.playEat(); else if (t === 'death') synth.playDeath(); else if (t === 'power') synth.startSiren('power'); });
@@ -178,25 +171,14 @@
             if(d) socket.emit('input', d); 
         });
 
-        // ОБРАБОТКА ДЕЛЬТА-ОБНОВЛЕНИЙ
         socket.on('state', s => {
-            // Применяем изменения
             if(s.changes) {
-                // Добавляем новые ряды
                 Object.assign(localRows, s.changes.newRows);
-                // Удаляем съеденное
-                s.changes.removedDots.forEach(pt => {
-                    if(localRows[pt.y]) localRows[pt.y][pt.x] = 0;
-                });
-                // Чистим память карты
+                s.changes.removedDots.forEach(pt => { if(localRows[pt.y]) localRows[pt.y][pt.x] = 0; });
                 const camGridY = Math.floor(s.camY / TILE_SIZE);
                 for(let k in localRows) { if(parseInt(k) > camGridY + 50) delete localRows[k]; }
             }
-
-            // Логика для интерполяции
-            prevState = currState;
-            currState = s;
-            // Если первого стейта не было, инициализируем
+            prevState = currState; currState = s;
             if(!prevState) prevState = currState;
         });
 
@@ -208,22 +190,14 @@
 
             if(!currState) return;
 
-            // Вычисляем интерполяцию
-            // Сервер шлет 60 Гц (16.6мс). Берем время сейчас - время пакета.
             const now = Date.now();
-            let t = (now - currState.t) / (1000 / 60); // 1.0 = 1 тик
-            // Ограничиваем t, чтобы не улететь в будущее при лагах
-            if (t > 1.5) t = 1.5; 
-            if (t < 0) t = 0;
-            
-            // Если нет предыдущего стейта (старт), t=0
+            let t = (now - currState.t) / (1000 / 60); 
+            if (t > 1.5) t = 1.5; if (t < 0) t = 0;
             if (!prevState) t = 0;
 
             const s = currState;
             const pS = prevState || currState;
-
-            // Интерполируем камеру
-            const camY = lerp(pS.camY, s.camY, 0.5); // Мягкая камера
+            const camY = lerp(pS.camY, s.camY, 0.5);
 
             const cdEl = document.getElementById('countdown-display');
             if (s.cd > 0) { cdEl.style.display = 'block'; cdEl.innerText = Math.ceil(s.cd); } 
@@ -238,7 +212,6 @@
             const startRow = Math.floor(camY / TILE_SIZE) - 2;
             const endRow = startRow + (canvas.height / TILE_SIZE) + 4;
 
-            // РИСОВАНИЕ (Используем localRows)
             for (let y = startRow; y <= endRow; y++) {
                 if (!localRows[y]) continue;
                 const sy = (y * TILE_SIZE - camY) | 0;
@@ -259,11 +232,9 @@
                 }
             }
 
-            // ИНТЕРПОЛЯЦИЯ ПРИЗРАКОВ
             s.ghosts.forEach((g, i) => {
-                // Пытаемся найти этого же призрака в прошлом кадре (по индексу, т.к. ID нет, но порядок массива обычно стабилен)
                 const prevG = (pS.ghosts && pS.ghosts[i]) ? pS.ghosts[i] : g;
-                const ix = lerp(prevG.x, g.x, 0.3); // 0.3 - небольшое сглаживание
+                const ix = lerp(prevG.x, g.x, 0.3); 
                 const iy = lerp(prevG.y, g.y, 0.3);
                 drawGhost(ctx, ix, iy - camY, g.color, g.vx, g.vy, s.ft);
             });
@@ -283,7 +254,6 @@
                 if(p.id === socket.id && p.score > prevScore) { synth.playWaka(); prevScore = p.score; }
                 if(!p.alive) continue;
                 
-                // ИНТЕРПОЛЯЦИЯ ИГРОКА
                 const ix = lerp(prevP.x, p.x, 0.5);
                 const iy = lerp(prevP.y, p.y, 0.5);
                 const sy = iy - camY;
