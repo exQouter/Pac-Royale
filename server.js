@@ -21,7 +21,7 @@ const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 // Камера (Разгон за 5 минут)
 const CAM_SPEED_START = 0.8;
 const CAM_SPEED_MAX   = 3.0;
-const CAM_ACCEL       = 0.000122; 
+const CAM_ACCEL       = 0.00015; // Чуть увеличил ускорение, чтобы разгон был заметнее
 
 // Игрок
 const PLAYER_SPEED_START = 1.6; 
@@ -129,10 +129,10 @@ function createGame(roomId) {
         ghosts: [], 
         cameraY: 0, 
         
-        // --- НОВАЯ ЛОГИКА СКОРОСТИ ---
-        gameSpeed: CAM_SPEED_START,   // Текущая скорость камеры (может замедляться)
-        targetSpeed: CAM_SPEED_START, // Целевая скорость (растет постоянно от времени)
-        slowdownTimer: 0,             // Таймер замедления после смерти
+        // --- ЛОГИКА СКОРОСТИ ---
+        gameSpeed: CAM_SPEED_START,   // Реальная скорость (падает при смерти)
+        targetSpeed: CAM_SPEED_START, // Идеальная скорость (всегда растет)
+        slowdownTimer: 0,             // Таймер штрафа
         
         rows: {}, 
         frightenedTimer: 0, 
@@ -142,7 +142,8 @@ function createGame(roomId) {
         isRunning: false, 
         hostId: null, 
         countdown: 0,
-        startTime: 0 
+        startTime: 0,
+        tickCount: 0 // Для логов
     };
     
     // Генерация начальной карты
@@ -323,24 +324,31 @@ setInterval(() => {
 }, 1000 / 60);
 
 function updateGamePhysics(game) {
-    // --- 1. УПРАВЛЕНИЕ СКОРОСТЬЮ КАМЕРЫ ---
+    game.tickCount++;
     
-    // Растет "целевая" скорость от времени матча
+    // --- 1. УПРАВЛЕНИЕ СКОРОСТЬЮ КАМЕРЫ ---
+    // Целевая скорость растет всегда
     if(game.targetSpeed < CAM_SPEED_MAX) {
         game.targetSpeed += CAM_ACCEL;
     }
 
-    // Логика реальной скорости (с учетом штрафа за смерть)
+    // Лог скорости раз в секунду (60 тиков)
+    if(game.tickCount % 60 === 0) {
+        console.log(`[${game.id}] CurSpeed: ${game.gameSpeed.toFixed(3)} / Target: ${game.targetSpeed.toFixed(3)}`);
+    }
+
+    // Логика текущей скорости (с учетом штрафа)
     if (game.slowdownTimer > 0) {
+        // Пока идет штраф, скорость стоит на месте (пониженная)
         game.slowdownTimer--;
-        // Пока идет штраф, скорость не растет (остается заниженной)
     } else {
-        // Если таймер прошел, плавно догоняем целевую скорость
+        // Восстановление скорости
         if (game.gameSpeed < game.targetSpeed) {
-            game.gameSpeed += 0.01; // Плавный возврат
+            // Плавно возвращаем скорость (0.005 за кадр = 0.3 за секунду)
+            game.gameSpeed += 0.005; 
             if (game.gameSpeed > game.targetSpeed) game.gameSpeed = game.targetSpeed;
         } else {
-            // Если мы не отстаем, просто следуем графику
+            // Если не отстаем, скорость равна целевой
             game.gameSpeed = game.targetSpeed;
         }
     }
@@ -348,7 +356,7 @@ function updateGamePhysics(game) {
     game.cameraY -= game.gameSpeed;
 
     // --- 2. СКОРОСТЬ СУЩНОСТЕЙ ---
-    // Используем targetSpeed для расчета прогресса, чтобы игроки не замедлялись вместе с камерой
+    // Игроки зависят от TargetSpeed (не замедляются вместе с камерой, чтобы убегать)
     let progressRatio = (game.targetSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (progressRatio < 0) progressRatio = 0;
     if (progressRatio > 1) progressRatio = 1;
@@ -357,7 +365,7 @@ function updateGamePhysics(game) {
     const currentGhostSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, progressRatio);
     const currentFrightSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, progressRatio);
 
-    // Генерация рядов
+    // Генерация карты
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
     
