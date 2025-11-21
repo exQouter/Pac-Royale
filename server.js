@@ -10,17 +10,29 @@ const io = new Server(http, {
 
 app.use(express.static('public'));
 
-// --- КОНФИГУРАЦИЯ ---
+// --- КОНФИГУРАЦИЯ И БАЛАНС ---
 const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 
-const PLAYER_SPEED = 2.0;
-const GHOST_SPEED_NORMAL = 1.5;
-const GHOST_SPEED_FRIGHTENED = 0.8;
-const CAMERA_MAX_SPEED = 1.4;
-const CAMERA_START_SPEED = 0.5;
-const CAMERA_ACCELERATION = 0.0005; 
+// 1. НАСТРОЙКИ СКОРОСТИ (Start -> Max)
+// Камера (теперь разгоняется 3 минуты)
+const CAM_SPEED_START = 1.0;        // Было 0.5 -> Стало 1.0
+const CAM_SPEED_MAX   = 3.0;        // Было 2.8 -> Стало 3.0
+const CAM_ACCEL       = 0.000185;   // Рассчитано на 3 минуты (180 сек)
+
+// Игрок (разгоняется синхронно с камерой)
+const PLAYER_SPEED_START = 2.0;
+const PLAYER_SPEED_MAX   = 4.0;
+
+// Призраки (разгоняются синхронно с камерой)
+const GHOST_SPEED_START  = 1.5;
+const GHOST_SPEED_MAX    = 3.0;
+
+// Испуганные призраки
+const FRIGHT_SPEED_START = 0.8;
+const FRIGHT_SPEED_MAX   = 2.0;
+
 const POWER_MODE_DURATION = 240; 
 const PVP_MODE_DURATION = 300; 
 
@@ -36,6 +48,11 @@ function makeId(length) {
     return result;
 }
 
+// Функция линейной интерполяции (плавный переход от min к max)
+function lerp(start, end, t) {
+    return start * (1 - t) + end * t;
+}
+
 const PATTERNS = [
     [[1,0,0,0,1,0,0,0,0,1,1,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],[1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1],[1,0,1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,1],[1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,1]],
     [[1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,0,0,0,0,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,3,1,0,0,0,1],[1,0,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,0,1],[1,0,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,1],[1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],[1,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1],[1,1,1,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1,1,1]],
@@ -45,7 +62,7 @@ const PATTERNS = [
 
 function createGame(roomId) {
     const game = {
-        id: roomId, players: {}, ghosts: [], cameraY: 0, gameSpeed: CAMERA_START_SPEED,
+        id: roomId, players: {}, ghosts: [], cameraY: 0, gameSpeed: CAM_SPEED_START,
         rows: {}, frightenedTimer: 0, nextGhostSpawn: -400, leaderboard: [],
         patternRowIndex: 0, currentPattern: null, isRunning: false, hostId: null, countdown: 0
     };
@@ -158,8 +175,22 @@ setInterval(() => {
 }, 1000 / 60);
 
 function updateGamePhysics(game) {
+    // 1. Ускорение камеры (рассчитано на 3 минуты)
+    if(game.gameSpeed < CAM_SPEED_MAX) {
+        game.gameSpeed += CAM_ACCEL;
+    }
     game.cameraY -= game.gameSpeed;
-    if(game.gameSpeed < CAMERA_MAX_SPEED) game.gameSpeed += CAMERA_ACCELERATION;
+
+    // 2. Вычисление прогресса (от 0.0 до 1.0)
+    let progressRatio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
+    if (progressRatio < 0) progressRatio = 0;
+    if (progressRatio > 1) progressRatio = 1;
+
+    // 3. Вычисление динамических скоростей для всех сущностей
+    const currentPlayerSpeed = lerp(PLAYER_SPEED_START, PLAYER_SPEED_MAX, progressRatio);
+    const currentGhostSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, progressRatio);
+    const currentFrightSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, progressRatio);
+
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
     if(game.frightenedTimer > 0) game.frightenedTimer--;
@@ -170,18 +201,23 @@ function updateGamePhysics(game) {
         if(!p.alive) continue;
         if(p.invulnTimer > 0) p.invulnTimer--;
         if(p.pvpTimer > 0) p.pvpTimer--;
+        
         const gx = Math.round(p.x / TILE_SIZE), gy = Math.round(p.y / TILE_SIZE), px = gx * TILE_SIZE, py = gy * TILE_SIZE;
-        if (Math.abs(p.x - px) <= PLAYER_SPEED && Math.abs(p.y - py) <= PLAYER_SPEED) {
-            if (p.nextDir) { if (getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { p.x = px; p.y = py; p.vx = p.nextDir.x * PLAYER_SPEED; p.vy = p.nextDir.y * PLAYER_SPEED; p.nextDir = null; } }
+        
+        // Используем НОВУЮ скорость игрока
+        if (Math.abs(p.x - px) <= currentPlayerSpeed && Math.abs(p.y - py) <= currentPlayerSpeed) {
+            if (p.nextDir) { if (getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { p.x = px; p.y = py; p.vx = p.nextDir.x * currentPlayerSpeed; p.vy = p.nextDir.y * currentPlayerSpeed; p.nextDir = null; } }
             if (getTile(game, gx + Math.sign(p.vx), gy + Math.sign(p.vy)) === TILE.WALL) { p.vx = 0; p.vy = 0; p.x = px; p.y = py; }
         }
         p.x += p.vx; p.y += p.vy;
+        
         const tile = getTile(game, gx, gy);
         if(tile === TILE.DOT) { game.rows[gy][gx] = TILE.EMPTY; p.score += 10; }
         else if(tile === TILE.POWER) { game.rows[gy][gx] = TILE.EMPTY; p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
         else if(tile === TILE.CHERRY) { game.rows[gy][gx] = TILE.EMPTY; p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100"}); io.to(game.id).emit('sfx', 'eatFruit'); }
         else if(tile === TILE.EVIL) { game.rows[gy][gx] = TILE.EMPTY; p.pvpTimer = PVP_MODE_DURATION; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
         else if(tile === TILE.HEART) { game.rows[gy][gx] = TILE.EMPTY; if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
+        
         if(p.y > game.cameraY + 800) loseLife(game, p);
     }
     for (let i = 0; i < playerIds.length; i++) {
@@ -199,7 +235,8 @@ function updateGamePhysics(game) {
         game.nextGhostSpawn -= 500;
     }
     game.ghosts.forEach(g => {
-        const speed = game.frightenedTimer > 0 ? GHOST_SPEED_FRIGHTENED : GHOST_SPEED_NORMAL;
+        // Используем НОВУЮ скорость призрака
+        const speed = game.frightenedTimer > 0 ? currentFrightSpeed : currentGhostSpeed;
         const gx = Math.round(g.x / TILE_SIZE), gy = Math.round(g.y / TILE_SIZE), px = gx * TILE_SIZE, py = gy * TILE_SIZE;
         const stuck = (g.vx===0 && g.vy===0);
         const atCenter = (Math.abs(g.x-px) <= speed/2 && Math.abs(g.y-py) <= speed/2);
