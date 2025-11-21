@@ -159,7 +159,7 @@
             constructor() {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.masterGain = this.ctx.createGain();
-                this.masterGain.gain.value = 0.15; // Общая громкость
+                this.masterGain.gain.value = 0.15; 
                 this.masterGain.connect(this.ctx.destination);
                 this.sirenOsc = null; 
             }
@@ -180,7 +180,6 @@
             }
 
             playClick() {
-                // Короткий 8-битный клик для UI
                 const t = this.ctx.currentTime;
                 const { osc, gain } = this.createSoftOscillator('square', 800, t);
                 gain.gain.setValueAtTime(0.1, t);
@@ -225,7 +224,6 @@
 
             playIntro() {
                 const t = this.ctx.currentTime;
-                // Мелодия старта игры
                 const notes = [246, 493, 369, 311, 493, 369, 311, 493, 369, 311, 246];
                 let time = t;
                 notes.forEach(freq => {
@@ -240,41 +238,27 @@
             startSiren(type) {
                 if (this.sirenOsc) return;
                 const t = this.ctx.currentTime;
-                
                 this.sirenOsc = this.ctx.createOscillator();
                 this.sirenOsc.type = type === 'power' ? 'triangle' : 'sine';
-                
                 const baseFreq = type === 'power' ? 300 : 150;
                 this.sirenOsc.frequency.setValueAtTime(baseFreq, t);
-                
                 const lfo = this.ctx.createOscillator();
                 lfo.frequency.value = type === 'power' ? 5 : 1.5;
                 const lfoGain = this.ctx.createGain();
                 lfoGain.gain.value = 20; 
-                
-                lfo.connect(lfoGain);
-                lfoGain.connect(this.sirenOsc.frequency);
+                lfo.connect(lfoGain); lfoGain.connect(this.sirenOsc.frequency);
                 lfo.start(t);
-                
                 const mainGain = this.ctx.createGain();
                 mainGain.gain.value = 0.1; 
-                
-                this.sirenOsc.connect(mainGain);
-                mainGain.connect(this.masterGain);
-                
+                this.sirenOsc.connect(mainGain); mainGain.connect(this.masterGain);
                 this.sirenOsc.start(t);
                 this.sirenLFO = lfo;
                 this.currentSirenType = type;
             }
 
             stopSiren() {
-                if (this.sirenOsc) { 
-                    try { 
-                        this.sirenOsc.stop(); 
-                        if(this.sirenLFO) this.sirenLFO.stop(); 
-                    } catch(e){} 
-                    this.sirenOsc = null; 
-                }
+                if (this.sirenOsc) { try { this.sirenOsc.stop(); if(this.sirenLFO) this.sirenLFO.stop(); } catch(e){} this.sirenOsc = null; }
+                this.currentSirenType = null;
             }
             
             checkSirenUpdate(newType) {
@@ -289,14 +273,9 @@
         const synth = new PacmanSynth();
 
         // --- UI ФУНКЦИИ ---
-        function uiClick() {
-            synth.resume();
-            synth.playClick();
-        }
-
+        function uiClick() { synth.resume(); synth.playClick(); }
         function enterMenu() {
-            synth.resume(); 
-            synth.playClick(); // Только клик, без музыки
+            synth.resume(); synth.playClick(); 
             document.getElementById('intro-screen').classList.remove('visible');
             document.getElementById('menu-screen').classList.add('visible');
         }
@@ -348,7 +327,7 @@
             location.reload();
         }
 
-        // --- SOCKET СОБЫТИЯ ---
+        // --- SOCKET ---
         socket.on('lobbyUpdate', d => {
             document.getElementById('menu-screen').classList.remove('visible');
             document.getElementById('lobby-screen').classList.add('visible');
@@ -362,15 +341,10 @@
         socket.on('roomClosed', () => { document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); document.getElementById('host-left-screen').classList.add('visible'); synth.stopSiren(); });
         
         socket.on('gameStarted', () => { 
-            // СКРЫВАЕМ МЕНЮ
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
             canvas.style.display = 'block'; 
             isJoined = true; 
-            
-            // ИГРАЕМ МУЗЫКУ СТАРТА
-            synth.playIntro();
-
-            // Сирену включаем после интро (через 4 секунды)
+            synth.playIntro(); 
             setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 4000); 
         });
 
@@ -400,16 +374,79 @@
             if(d) socket.emit('input', d); 
         });
 
-        function drawGhost(ctx, x, y, color, vx, vy, scared) {
-            const cx = x + TILE_SIZE/2; const cy = y + TILE_SIZE/2;
-            ctx.fillStyle = scared ? ((Date.now()%400<200)?'white':'blue') : color;
-            ctx.beginPath(); ctx.arc(cx, cy-2, 13, Math.PI, 0); ctx.lineTo(cx+13, cy+13);
-            for(let i=1; i<=3; i++) { ctx.lineTo(cx+13-26/3*i+26/6, cy+10); ctx.lineTo(cx+13-26/3*i, cy+13); }
-            ctx.lineTo(cx-13, cy-2); ctx.fill();
-            if(!scared) {
-                let px = vx>0?2:(vx<0?-2:0); let py = vy>0?2:(vy<0?-2:0);
-                ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(cx-4, cy-4, 4, 0, Math.PI*2); ctx.arc(cx+4, cy-4, 4, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle='blue'; ctx.beginPath(); ctx.arc(cx-4+px, cy-4+py, 2, 0, Math.PI*2); ctx.arc(cx+4+px, cy-4+py, 2, 0, Math.PI*2); ctx.fill();
+        function drawGhost(ctx, x, y, color, vx, vy, frightenedTimer) {
+            const cx = x + TILE_SIZE/2;
+            const cy = y + TILE_SIZE/2;
+            let bodyColor = color;
+            let isScared = frightenedTimer > 0;
+
+            // ЛОГИКА ЦВЕТА (СИНИЙ / МИГАЮЩИЙ)
+            if (isScared) {
+                // Если осталось меньше 2 секунд (120 кадров), мигаем
+                if (frightenedTimer < 120 && Math.floor(Date.now() / 200) % 2 === 0) {
+                    bodyColor = '#FFFFFF'; // Белая вспышка
+                } else {
+                    bodyColor = '#1919A6'; // Темно-синий
+                }
+            }
+
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            // Голова
+            ctx.arc(cx, cy - 2, 13, Math.PI, 0);
+            ctx.lineTo(cx + 13, cy + 13);
+
+            // Ноги / Зигзаг
+            if (isScared) {
+                // Рисуем зигзаг (испуганный)
+                const waveWidth = 6;
+                for (let i = 1; i <= 4; i++) {
+                    ctx.lineTo(cx + 13 - waveWidth * i + waveWidth/2, cy + 10);
+                    ctx.lineTo(cx + 13 - waveWidth * i, cy + 13);
+                }
+            } else {
+                // Обычные ножки (3 штуки)
+                for(let i=1; i<=3; i++) {
+                    ctx.lineTo(cx + 13 - 26/3*i + 26/6, cy + 10);
+                    ctx.lineTo(cx + 13 - 26/3*i, cy + 13);
+                }
+            }
+            ctx.lineTo(cx - 13, cy - 2);
+            ctx.fill();
+
+            // ЛИЦО
+            if (isScared) {
+                // Испуганное лицо (маленькие глазки + зигзаг рот)
+                const faceColor = (bodyColor === '#FFFFFF') ? '#FF0000' : '#FFB8FF';
+                ctx.fillStyle = faceColor;
+                // Глаза
+                ctx.fillRect(cx - 5, cy - 2, 2, 2);
+                ctx.fillRect(cx + 3, cy - 2, 2, 2);
+                // Рот
+                ctx.strokeStyle = faceColor;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx - 10, cy + 5);
+                ctx.lineTo(cx - 6, cy + 2);
+                ctx.lineTo(cx - 2, cy + 5);
+                ctx.lineTo(cx + 2, cy + 2);
+                ctx.lineTo(cx + 6, cy + 5);
+                ctx.lineTo(cx + 10, cy + 2);
+                ctx.stroke();
+            } else {
+                // Обычное лицо
+                let px = vx > 0 ? 2 : (vx < 0 ? -2 : 0);
+                let py = vy > 0 ? 2 : (vy < 0 ? -2 : 0);
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(cx - 4, cy - 4, 4, 0, Math.PI * 2);
+                ctx.arc(cx + 4, cy - 4, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'blue';
+                ctx.beginPath();
+                ctx.arc(cx - 4 + px, cy - 4 + py, 2, 0, Math.PI * 2);
+                ctx.arc(cx + 4 + px, cy - 4 + py, 2, 0, Math.PI * 2);
+                ctx.fill();
             }
         }
 
@@ -420,14 +457,9 @@
             else if (s.countdown > -1) { cdEl.style.display = 'block'; cdEl.innerText = "GO!"; } 
             else { cdEl.style.display = 'none'; }
             
-            // Проверяем состояние сирены (обычная или power mode)
-            if(s.frightenedTimer > 0) {
-                synth.checkSirenUpdate('power');
-            } else {
-                // Сирена включается только если интро уже прошло
-                if (Date.now() - s.startTime > 4000 || s.countdown < 0) {
-                    synth.checkSirenUpdate('normal');
-                }
+            if (Date.now() - (s.startTime || 0) > 4000 || s.countdown < 0) {
+                if(s.frightenedTimer > 0) synth.checkSirenUpdate('power');
+                else synth.checkSirenUpdate('normal');
             }
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -437,35 +469,36 @@
 
             for (let y = startRow; y <= endRow; y++) {
                 if (!s.rows[y]) continue;
-                const sy = y * TILE_SIZE - camY;
+                const sy = (y * TILE_SIZE - camY) | 0;
                 for (let x = 0; x < 20; x++) {
-                    const t = s.rows[y][x]; const sx = x * TILE_SIZE;
+                    const t = s.rows[y][x]; 
+                    const sx = x * TILE_SIZE;
+                    
                     if (t === 1) { // WALL
-                        ctx.fillStyle = '#1919A6'; ctx.fillRect(sx, sy, TILE_SIZE, TILE_SIZE);
-                        ctx.fillStyle = 'black'; ctx.fillRect(sx+4, sy+4, TILE_SIZE-8, TILE_SIZE-8);
-                        if(x<19 && s.rows[y][x+1]===1) ctx.fillRect(sx+20, sy+4, 10, 22);
-                        if(x>0 && s.rows[y][x-1]===1) ctx.fillRect(sx, sy+4, 4, 22);
-                        if(s.rows[y+1] && s.rows[y+1][x]===1) ctx.fillRect(sx+4, sy+20, 22, 10);
-                        if(s.rows[y-1] && s.rows[y-1][x]===1) ctx.fillRect(sx+4, sy, 22, 4);
-                    } else if (t === 2) { // DOT
+                        ctx.fillStyle = '#1919A6';
+                        ctx.fillRect(sx, sy, TILE_SIZE, TILE_SIZE);
+                        ctx.fillStyle = 'black';
+                        ctx.fillRect(sx + 4, sy + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                        if (x < 19 && s.rows[y][x+1] === 1) ctx.fillRect(sx + TILE_SIZE - 4, sy + 4, 8, TILE_SIZE - 8);
+                        if (x > 0 && s.rows[y][x-1] === 1) ctx.fillRect(sx - 4, sy + 4, 8, TILE_SIZE - 8);
+                        if (s.rows[y+1] && s.rows[y+1][x] === 1) ctx.fillRect(sx + 4, sy + TILE_SIZE - 4, TILE_SIZE - 8, 8);
+                        if (s.rows[y-1] && s.rows[y-1][x] === 1) ctx.fillRect(sx + 4, sy - 4, TILE_SIZE - 8, 8);
+                    } else if (t === 2) { 
                         ctx.fillStyle = '#ffb8ae'; ctx.fillRect(sx+13, sy+13, 4, 4);
-                    } else if (t === 3) { // POWER
-                        ctx.fillStyle = (Date.now()%400 < 200) ? '#fff' : '#ffb8ae';
-                        ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
-                    } else if (t === 4) { // CHERRY
-                        ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill();
-                        ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
-                    } else if (t === 5) { // EVIL
-                        ctx.fillStyle = '#9900ff'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
-                        ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill();
-                        ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
-                    } else if (t === 6) { // HEART
-                        ctx.fillStyle = '#ff3333';
-                        ctx.beginPath(); ctx.moveTo(sx+15, sy+10); ctx.bezierCurveTo(sx+15, sy+8, sx+12, sy+5, sx+8, sy+5); ctx.bezierCurveTo(sx+2, sy+5, sx+2, sy+14, sx+15, sy+22); ctx.bezierCurveTo(sx+28, sy+14, sx+28, sy+5, sx+22, sy+5); ctx.bezierCurveTo(sx+18, sy+5, sx+15, sy+8, sx+15, sy+10); ctx.fill();
+                    } else if (t === 3) { 
+                        ctx.fillStyle = (Date.now()%400 < 200) ? '#fff' : '#ffb8ae'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
+                    } else if (t === 4) { 
+                        ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
+                    } else if (t === 5) { 
+                        ctx.fillStyle = '#9900ff'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
+                    } else if (t === 6) { 
+                        ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(sx+15, sy+10); ctx.bezierCurveTo(sx+15, sy+8, sx+12, sy+5, sx+8, sy+5); ctx.bezierCurveTo(sx+2, sy+5, sx+2, sy+14, sx+15, sy+22); ctx.bezierCurveTo(sx+28, sy+14, sx+28, sy+5, sx+22, sy+5); ctx.bezierCurveTo(sx+18, sy+5, sx+15, sy+8, sx+15, sy+10); ctx.fill();
                     }
                 }
             }
-            s.ghosts.forEach(g => drawGhost(ctx, g.x, g.y - camY, g.color, g.vx, g.vy, s.frightenedTimer > 0));
+
+            // Рисуем призраков с передачей таймера страха!
+            s.ghosts.forEach(g => drawGhost(ctx, g.x, g.y - camY, g.color, g.vx, g.vy, s.frightenedTimer));
             
             for(let i=0; i<4; i++) document.getElementById(`p${i}`).classList.remove('active');
             for(let id in s.players) {
@@ -497,8 +530,9 @@
             if(s.countdown > 0) { deathZoneY = canvas.height + 100; } else { deathZoneY += (targetY - deathZoneY) * 0.02; }
             const time = Date.now()/200;
             const gCols = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
-            for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5)*5; drawGhost(ctx, i*30, deathZoneY + waveY, gCols[i%4], 0, -1, false); }
-            for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5 + 2)*5; drawGhost(ctx, i*30-15, deathZoneY + 15 + waveY, gCols[(i+2)%4], 0, -1, false); }
+            // Отрисовка волны смерти (призраки внизу) - здесь таймер страха не нужен, они всегда нормальные
+            for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5)*5; drawGhost(ctx, i*30, deathZoneY + waveY, gCols[i%4], 0, -1, 0); }
+            for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5 + 2)*5; drawGhost(ctx, i*30-15, deathZoneY + 15 + waveY, gCols[(i+2)%4], 0, -1, 0); }
         });
     </script>
 </body>

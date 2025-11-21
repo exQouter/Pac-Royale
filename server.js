@@ -2,6 +2,8 @@ const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const { Server } = require("socket.io");
+const fs = require('fs');
+const path = require('path');
 
 // Настройка для Render
 const io = new Server(http, {
@@ -10,27 +12,28 @@ const io = new Server(http, {
 
 app.use(express.static('public'));
 
-// --- КОНФИГУРАЦИЯ И БАЛАНС ---
+// --- КОНФИГУРАЦИЯ ---
 const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 
-// 1. НАСТРОЙКИ СКОРОСТИ (Start -> Max)
-// Камера (теперь разгоняется 3 минуты)
-const CAM_SPEED_START = 1.0;        // Было 0.5 -> Стало 1.0
-const CAM_SPEED_MAX   = 3.0;        // Было 2.8 -> Стало 3.0
-const CAM_ACCEL       = 0.000185;   // Рассчитано на 3 минуты (180 сек)
+// --- БАЛАНС СКОРОСТИ ---
 
-// Игрок (разгоняется синхронно с камерой)
-const PLAYER_SPEED_START = 2.0;
+// Камера (Разгон за 5 минут)
+const CAM_SPEED_START = 1.0;
+const CAM_SPEED_MAX   = 3.0;
+const CAM_ACCEL       = 0.000111; 
+
+// Игрок (Старт: 1.6 -> Макс: 4.0)
+const PLAYER_SPEED_START = 1.6; 
 const PLAYER_SPEED_MAX   = 4.0;
 
-// Призраки (разгоняются синхронно с камерой)
+// Призраки (Старт: 1.5 -> Макс: 3.8)
 const GHOST_SPEED_START  = 1.5;
-const GHOST_SPEED_MAX    = 3.0;
+const GHOST_SPEED_MAX    = 3.8; 
 
-// Испуганные призраки
-const FRIGHT_SPEED_START = 0.8;
+// Испуганные призраки (Старт: 1.0 -> Макс: 2.0)
+const FRIGHT_SPEED_START = 1.0;
 const FRIGHT_SPEED_MAX   = 2.0;
 
 const POWER_MODE_DURATION = 240; 
@@ -39,7 +42,33 @@ const PVP_MODE_DURATION = 300;
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
 
 const lobbies = {};
+
+// --- ЛОКАЛЬНОЕ СОХРАНЕНИЕ РЕКОРДОВ ---
+const DATA_FILE = path.join(__dirname, 'leaderboard.json');
 let globalLeaderboard = [];
+
+function loadLeaderboard() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = fs.readFileSync(DATA_FILE, 'utf8');
+            globalLeaderboard = JSON.parse(data);
+        }
+    } catch (err) {
+        console.error('Ошибка чтения leaderboard.json:', err);
+        globalLeaderboard = [];
+    }
+}
+
+function saveLeaderboard() {
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(globalLeaderboard, null, 2));
+    } catch (err) {
+        console.error('Ошибка записи leaderboard.json:', err);
+    }
+}
+
+// Загружаем при старте
+loadLeaderboard();
 
 function makeId(length) {
     let result = '';
@@ -48,16 +77,51 @@ function makeId(length) {
     return result;
 }
 
-// Функция линейной интерполяции (плавный переход от min к max)
 function lerp(start, end, t) {
     return start * (1 - t) + end * t;
 }
 
+// --- ПАТТЕРНЫ (КЛАССИЧЕСКИЕ) ---
 const PATTERNS = [
-    [[1,0,0,0,1,0,0,0,0,1,1,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,0,1,1,0,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],[1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1],[1,0,1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,1],[1,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,1]],
-    [[1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,0,0,0,0,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,3,1,0,0,0,1],[1,0,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,0,1],[1,0,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,1],[1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],[1,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1],[1,1,1,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1,1,1]],
-    [[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,0,1,1,0,1,1,1,1,0,1,1,0,1,1,0,1],[1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],[1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],[1,0,0,3,0,0,0,0,0,1,1,0,0,0,0,0,3,0,0,1],[1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,1,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,1,1]],
-    [[1,0,1,0,1,0,1,0,1,1,1,1,0,1,0,1,0,1,0,1],[1,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,0,1],[1,0,1,0,1,0,1,0,0,0,0,0,0,1,0,1,0,1,0,1],[1,0,1,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1,0,1],[1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,0,1,1,1,0,1,1,1,1,0,1,1,1,0,1,0,1],[1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],[1,0,1,0,0,0,1,1,1,0,0,1,1,1,0,0,0,1,0,1],[1,0,1,1,1,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1]]
+    // 1. Перекресток
+    [
+        [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1],
+        [1,0,1,1,1,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1],
+        [1,0,1,1,1,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1]
+    ],
+    // 2. Коридоры
+    [
+        [1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+        [1,0,1,0,1,0,1,1,1,1,1,1,0,1,0,1,0,1,0,1],
+        [1,0,1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1],
+        [1,0,1,0,0,0,1,1,1,0,0,1,1,1,0,0,0,1,0,1],
+        [1,0,1,1,1,0,1,3,0,0,0,0,3,1,0,1,1,1,0,1], 
+        [1,0,1,1,1,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+        [1,1,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,1,1]
+    ],
+    // 3. Коробки
+    [
+        [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],
+        [1,0,0,3,0,0,0,0,0,1,1,0,0,0,0,0,3,0,0,1],
+        [1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,1,1]
+    ]
 ];
 
 function createGame(roomId) {
@@ -67,7 +131,12 @@ function createGame(roomId) {
         patternRowIndex: 0, currentPattern: null, isRunning: false, hostId: null, countdown: 0
     };
     for(let y=30; y>=-50; y--) generateRow(game, y);
-    for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
+    for(let y=20; y<25; y++) { 
+        for(let x=1; x<MAP_WIDTH-1; x++) { 
+            if(!game.rows[y]) game.rows[y]=[]; 
+            game.rows[y][x] = TILE.EMPTY; 
+        } 
+    }
     return game;
 }
 
@@ -76,16 +145,23 @@ function generateRow(game, yIndex) {
         game.currentPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
         game.patternRowIndex = 0;
     }
-    const row = [...game.currentPattern[9 - game.patternRowIndex]];
+    const rowTemplate = game.currentPattern[9 - game.patternRowIndex];
+    const row = [...rowTemplate];
     game.patternRowIndex++;
+
     for(let i=0; i<row.length; i++) { 
         if(row[i] === 0) {
             const r = Math.random();
-            if (r < 0.0005) row[i] = TILE.EVIL; else if (r < 0.0020) row[i] = TILE.HEART; else if (r < 0.0070) row[i] = TILE.CHERRY; else row[i] = TILE.DOT;
-        } else if (row[i] === 3) { row[i] = TILE.POWER; }
+            if (r < 0.0005) row[i] = TILE.EVIL; 
+            else if (r < 0.0020) row[i] = TILE.HEART; 
+            else if (r < 0.0070) row[i] = TILE.CHERRY; 
+            else row[i] = TILE.DOT;
+        } else if (row[i] === 3) { 
+            row[i] = TILE.POWER; 
+        }
     }
     game.rows[yIndex] = row;
-    const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 60;
+    const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 45;
     for (let k in game.rows) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; }
 }
 function getTile(game, x, y) { if (!game.rows[y]) return TILE.WALL; return game.rows[y][x]; }
@@ -135,13 +211,20 @@ io.on('connection', (socket) => {
             if (p && p.alive) p.nextDir = dir;
         }
     });
+    
+    // СОХРАНЕНИЕ РЕКОРДОВ
     socket.on('submitScore', ({ name, score }) => {
         const safeName = (name || "PLAYER").substring(0, 10).toUpperCase();
-        globalLeaderboard.push({ name: safeName, score: parseInt(score) || 0 });
+        const safeScore = parseInt(score) || 0;
+        
+        globalLeaderboard.push({ name: safeName, score: safeScore });
         globalLeaderboard.sort((a, b) => b.score - a.score);
         globalLeaderboard = globalLeaderboard.slice(0, 10);
+        
+        saveLeaderboard(); // Сохраняем в файл
         io.emit('leaderboardUpdate', globalLeaderboard);
     });
+
     socket.on('disconnect', () => {
         if (currentRoom && lobbies[currentRoom]) {
             const game = lobbies[currentRoom];
@@ -175,19 +258,17 @@ setInterval(() => {
 }, 1000 / 60);
 
 function updateGamePhysics(game) {
-    // 1. Ускорение камеры (рассчитано на 3 минуты)
     if(game.gameSpeed < CAM_SPEED_MAX) {
         game.gameSpeed += CAM_ACCEL;
     }
     game.cameraY -= game.gameSpeed;
 
-    // 2. Вычисление прогресса (от 0.0 до 1.0)
     let progressRatio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (progressRatio < 0) progressRatio = 0;
     if (progressRatio > 1) progressRatio = 1;
 
-    // 3. Вычисление динамических скоростей для всех сущностей
-    const currentPlayerSpeed = lerp(PLAYER_SPEED_START, PLAYER_SPEED_MAX, progressRatio);
+    // Базовая скорость игрока (зависит от разгона игры)
+    const basePlayerSpeed = lerp(PLAYER_SPEED_START, PLAYER_SPEED_MAX, progressRatio);
     const currentGhostSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, progressRatio);
     const currentFrightSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, progressRatio);
 
@@ -204,9 +285,19 @@ function updateGamePhysics(game) {
         
         const gx = Math.round(p.x / TILE_SIZE), gy = Math.round(p.y / TILE_SIZE), px = gx * TILE_SIZE, py = gy * TILE_SIZE;
         
-        // Используем НОВУЮ скорость игрока
-        if (Math.abs(p.x - px) <= currentPlayerSpeed && Math.abs(p.y - py) <= currentPlayerSpeed) {
-            if (p.nextDir) { if (getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { p.x = px; p.y = py; p.vx = p.nextDir.x * currentPlayerSpeed; p.vy = p.nextDir.y * currentPlayerSpeed; p.nextDir = null; } }
+        // --- РАСЧЕТ СКОРОСТИ ДЛЯ ИГРОКА ---
+        let effectiveSpeed = basePlayerSpeed;
+        // Если активен PVP режим (съел злой смайл), увеличиваем скорость на 30%
+        if (p.pvpTimer > 0) {
+            effectiveSpeed *= 1.3;
+        }
+
+        // Мгновенно обновляем текущую скорость, если игрок движется
+        if (p.vx !== 0) p.vx = Math.sign(p.vx) * effectiveSpeed;
+        if (p.vy !== 0) p.vy = Math.sign(p.vy) * effectiveSpeed;
+
+        if (Math.abs(p.x - px) <= effectiveSpeed && Math.abs(p.y - py) <= effectiveSpeed) {
+            if (p.nextDir) { if (getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { p.x = px; p.y = py; p.vx = p.nextDir.x * effectiveSpeed; p.vy = p.nextDir.y * effectiveSpeed; p.nextDir = null; } }
             if (getTile(game, gx + Math.sign(p.vx), gy + Math.sign(p.vy)) === TILE.WALL) { p.vx = 0; p.vy = 0; p.x = px; p.y = py; }
         }
         p.x += p.vx; p.y += p.vy;
@@ -215,7 +306,12 @@ function updateGamePhysics(game) {
         if(tile === TILE.DOT) { game.rows[gy][gx] = TILE.EMPTY; p.score += 10; }
         else if(tile === TILE.POWER) { game.rows[gy][gx] = TILE.EMPTY; p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
         else if(tile === TILE.CHERRY) { game.rows[gy][gx] = TILE.EMPTY; p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100"}); io.to(game.id).emit('sfx', 'eatFruit'); }
-        else if(tile === TILE.EVIL) { game.rows[gy][gx] = TILE.EMPTY; p.pvpTimer = PVP_MODE_DURATION; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
+        else if(tile === TILE.EVIL) { 
+            game.rows[gy][gx] = TILE.EMPTY; 
+            p.pvpTimer = PVP_MODE_DURATION; 
+            io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); 
+            io.to(game.id).emit('sfx', 'power'); 
+        }
         else if(tile === TILE.HEART) { game.rows[gy][gx] = TILE.EMPTY; if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         
         if(p.y > game.cameraY + 800) loseLife(game, p);
@@ -235,7 +331,6 @@ function updateGamePhysics(game) {
         game.nextGhostSpawn -= 500;
     }
     game.ghosts.forEach(g => {
-        // Используем НОВУЮ скорость призрака
         const speed = game.frightenedTimer > 0 ? currentFrightSpeed : currentGhostSpeed;
         const gx = Math.round(g.x / TILE_SIZE), gy = Math.round(g.y / TILE_SIZE), px = gx * TILE_SIZE, py = gy * TILE_SIZE;
         const stuck = (g.vx===0 && g.vy===0);
