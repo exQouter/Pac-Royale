@@ -21,7 +21,7 @@ const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 // Камера (Разгон за 5 минут)
 const CAM_SPEED_START = 0.8;
 const CAM_SPEED_MAX   = 3.0;
-const CAM_ACCEL       = 0.00015; // Чуть увеличил ускорение, чтобы разгон был заметнее
+const CAM_ACCEL       = 0.000122; 
 
 // Игрок
 const PLAYER_SPEED_START = 1.6; 
@@ -59,7 +59,7 @@ function loadLeaderboard() {
     }
 }
 
-// Асинхронная запись
+// Асинхронная запись, чтобы не блокировать игровой цикл
 function saveLeaderboard() {
     fs.writeFile(DATA_FILE, JSON.stringify(globalLeaderboard, null, 2), (err) => {
         if (err) console.error('Ошибка записи leaderboard.json:', err);
@@ -80,6 +80,7 @@ function lerp(start, end, t) {
 }
 
 // --- ПАТТЕРНЫ (Левая половина 10x10) ---
+// Стены зеркалятся, содержимое пустых клеток генерируется случайно для каждой стороны
 const PATTERNS = [
     // 1. Перекресток
     [
@@ -100,7 +101,7 @@ const PATTERNS = [
         [1,0,1,0,1,0,1,1,1,1],
         [1,0,1,0,1,0,0,0,0,0],
         [1,0,1,0,0,0,1,1,1,0],
-        [1,0,1,1,1,0,1,3,0,0], 
+        [1,0,1,1,1,0,1,3,0,0], // 3 - фиксированный Энерджайзер (будет симметричен)
         [1,0,1,1,1,0,1,1,1,0],
         [1,0,0,0,0,0,0,0,0,0],
         [1,0,1,1,1,1,1,0,1,1],
@@ -128,12 +129,7 @@ function createGame(roomId) {
         players: {}, 
         ghosts: [], 
         cameraY: 0, 
-        
-        // --- ЛОГИКА СКОРОСТИ ---
-        gameSpeed: CAM_SPEED_START,   // Реальная скорость (падает при смерти)
-        targetSpeed: CAM_SPEED_START, // Идеальная скорость (всегда растет)
-        slowdownTimer: 0,             // Таймер штрафа
-        
+        gameSpeed: CAM_SPEED_START,
         rows: {}, 
         frightenedTimer: 0, 
         nextGhostSpawn: -400, 
@@ -142,14 +138,13 @@ function createGame(roomId) {
         isRunning: false, 
         hostId: null, 
         countdown: 0,
-        startTime: 0,
-        tickCount: 0 // Для логов
+        startTime: 0 
     };
     
     // Генерация начальной карты
     for(let y=30; y>=-50; y--) generateRow(game, y);
     
-    // Стартовая площадка
+    // Стартовая площадка (безопасная зона)
     for(let y=20; y<25; y++) { 
         for(let x=1; x<MAP_WIDTH-1; x++) { 
             if(!game.rows[y]) game.rows[y]=[]; 
@@ -160,16 +155,19 @@ function createGame(roomId) {
 }
 
 function generateRow(game, yIndex) {
+    // Выбор нового паттерна, если старый закончился
     if (!game.currentPattern || game.patternRowIndex >= 10) {
         game.currentPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
         game.patternRowIndex = 0;
     }
     
+    // Берем строку шаблона (левую половину)
     const halfRowTemplate = game.currentPattern[9 - game.patternRowIndex];
     game.patternRowIndex++;
 
-    const row = new Array(MAP_WIDTH); 
+    const row = new Array(MAP_WIDTH); // Ряд длиной 20
 
+    // Функция рандома для лута
     function getRandomContent() {
         const r = Math.random();
         if (r < 0.0005) return TILE.EVIL; 
@@ -178,19 +176,23 @@ function generateRow(game, yIndex) {
         return TILE.DOT;
     }
 
+    // Заполняем ряд
     for(let i = 0; i < 10; i++) { 
         const templateVal = halfRowTemplate[i];
         const rightIndex = 19 - i;
 
         if (templateVal === 1) {
+            // СТЕНА: Зеркально
             row[i] = TILE.WALL;
             row[rightIndex] = TILE.WALL;
         } 
         else if (templateVal === 3) {
+            // ЭНЕРДЖАЙЗЕР: Зеркально
             row[i] = TILE.POWER;
             row[rightIndex] = TILE.POWER;
         } 
         else {
+            // ПУСТОТА: Лут генерируется отдельно для каждой стороны
             row[i] = getRandomContent();
             row[rightIndex] = getRandomContent();
         }
@@ -198,6 +200,7 @@ function generateRow(game, yIndex) {
 
     game.rows[yIndex] = row;
 
+    // Удаляем старые строки
     const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 45;
     for (let k in game.rows) { 
         if (parseInt(k) > cleanupThreshold) delete game.rows[k]; 
@@ -324,40 +327,13 @@ setInterval(() => {
 }, 1000 / 60);
 
 function updateGamePhysics(game) {
-    game.tickCount++;
-    
-    // --- 1. УПРАВЛЕНИЕ СКОРОСТЬЮ КАМЕРЫ ---
-    // Целевая скорость растет всегда
-    if(game.targetSpeed < CAM_SPEED_MAX) {
-        game.targetSpeed += CAM_ACCEL;
+    // Камера
+    if(game.gameSpeed < CAM_SPEED_MAX) {
+        game.gameSpeed += CAM_ACCEL;
     }
-
-    // Лог скорости раз в секунду (60 тиков)
-    if(game.tickCount % 60 === 0) {
-        console.log(`[${game.id}] CurSpeed: ${game.gameSpeed.toFixed(3)} / Target: ${game.targetSpeed.toFixed(3)}`);
-    }
-
-    // Логика текущей скорости (с учетом штрафа)
-    if (game.slowdownTimer > 0) {
-        // Пока идет штраф, скорость стоит на месте (пониженная)
-        game.slowdownTimer--;
-    } else {
-        // Восстановление скорости
-        if (game.gameSpeed < game.targetSpeed) {
-            // Плавно возвращаем скорость (0.005 за кадр = 0.3 за секунду)
-            game.gameSpeed += 0.005; 
-            if (game.gameSpeed > game.targetSpeed) game.gameSpeed = game.targetSpeed;
-        } else {
-            // Если не отстаем, скорость равна целевой
-            game.gameSpeed = game.targetSpeed;
-        }
-    }
-
     game.cameraY -= game.gameSpeed;
 
-    // --- 2. СКОРОСТЬ СУЩНОСТЕЙ ---
-    // Игроки зависят от TargetSpeed (не замедляются вместе с камерой, чтобы убегать)
-    let progressRatio = (game.targetSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
+    let progressRatio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (progressRatio < 0) progressRatio = 0;
     if (progressRatio > 1) progressRatio = 1;
 
@@ -365,7 +341,7 @@ function updateGamePhysics(game) {
     const currentGhostSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, progressRatio);
     const currentFrightSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, progressRatio);
 
-    // Генерация карты
+    // Генерация карты впереди
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
     
@@ -373,7 +349,7 @@ function updateGamePhysics(game) {
 
     const playerIds = Object.keys(game.players);
     
-    // --- 3. ЛОГИКА ИГРОКОВ ---
+    // Логика Игроков
     for (let id of playerIds) {
         let p = game.players[id];
         if(!p.alive) continue;
@@ -395,7 +371,7 @@ function updateGamePhysics(game) {
         let effectiveSpeed = currentPlayerSpeed;
         if (p.pvpTimer > 0) effectiveSpeed *= 1.3;
 
-        // Движение
+        // Движение и коллизии со стенами
         const moveStep = effectiveSpeed;
         if (Math.abs(p.x - px) <= moveStep && Math.abs(p.y - py) <= moveStep) {
             if (p.nextDir) { 
@@ -418,7 +394,7 @@ function updateGamePhysics(game) {
         p.x += p.vx; 
         p.y += p.vy;
         
-        // Предметы
+        // Сбор предметов
         const tile = getTile(game, gx, gy);
         if(tile === TILE.DOT) { game.rows[gy][gx] = TILE.EMPTY; p.score += 10; }
         else if(tile === TILE.POWER) { game.rows[gy][gx] = TILE.EMPTY; p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
@@ -442,7 +418,7 @@ function updateGamePhysics(game) {
         if(p.y > game.cameraY + 800) loseLife(game, p);
     }
 
-    // --- 4. PVP СТОЛКНОВЕНИЯ ---
+    // PvP
     for (let i = 0; i < playerIds.length; i++) {
         for (let j = i + 1; j < playerIds.length; j++) {
             const p1 = game.players[playerIds[i]];
@@ -465,7 +441,7 @@ function updateGamePhysics(game) {
         }
     }
 
-    // --- 5. ПРИЗРАКИ ---
+    // Призраки
     if (game.cameraY < game.nextGhostSpawn) {
         let sx, sy, tries=0; 
         do { 
@@ -567,13 +543,7 @@ function finalizeDeath(game, p) {
         p.invulnTimer = 120; 
         p.pvpTimer = 0; 
         p.deathTimer = 0;
-        
-        // --- ЛОГИКА ШТРАФА КАМЕРЫ ---
-        // Скорость падает на 30%, но не ниже стартовой
-        game.gameSpeed = Math.max(game.gameSpeed * 0.7, CAM_SPEED_START);
-        // Штраф длится 5 секунд (300 кадров при 60 FPS)
-        game.slowdownTimer = 300;
-        
+        game.gameSpeed *= 0.7;
     } else { 
         p.alive = false; 
         io.to(p.id).emit('gameOver', p.score); 
