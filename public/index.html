@@ -57,7 +57,6 @@
 </head>
 <body>
 
-    <!-- 1. INTRO -->
     <div id="intro-screen" class="screen visible">
         <h1 style="color:#ffcc00; font-size:36px; margin-bottom:40px; text-shadow: 4px 4px 0 #b8860b;">PAC-ROYALE</h1>
         <p style="font-size:10px; color:#aaa; margin-bottom:20px;">ONLINE BATTLE</p>
@@ -65,7 +64,6 @@
         <button id="scoreboard-btn" onclick="toggleBoard(); uiClick()">🏆 SCOREBOARD</button>
     </div>
 
-    <!-- 2. SETUP MENU -->
     <div id="menu-screen" class="screen">
         <h2 style="color:#ffcc00; margin-bottom:10px;">SETUP PROFILE</h2>
         <div style="width: 80%; margin: 0 auto;">
@@ -89,7 +87,6 @@
         <button style="background: #444; border-color: #666; margin-top:30px; width:auto;" onclick="backToIntro(); uiClick()">BACK</button>
     </div>
 
-    <!-- 3. LOBBY -->
     <div id="lobby-screen" class="screen" style="min-width: 600px;">
         <h2 style="font-size:16px; color:#aaa;">LOBBY ROOM</h2>
         <div class="lobby-code" id="lobby-code-display" onclick="copyLink(); uiClick()">CODE: ????</div>
@@ -106,7 +103,6 @@
         <div id="waiting-msg" style="font-size:10px; color:#FFFF00; margin-top:20px;">WAITING FOR HOST...</div>
     </div>
 
-    <!-- BOARD -->
     <div id="board-screen" class="screen">
         <h1 style="color:#ffcc00;">TOP 10</h1>
         <table id="board-table" style="width:100%; color:#ccc; font-size:10px; margin-top:20px;"></table>
@@ -115,7 +111,6 @@
 
     <div id="countdown-display">3</div>
 
-    <!-- GAME UI -->
     <div class="ui-column">
         <div class="side-panel" id="p0"><div class="pac-avatar" style="background:#FFFF00; color:#FFFF00"></div><div class="player-name-ui" id="n0">P1</div><div class="stat-label">SCORE</div><div class="score-box" id="s0">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l0">❤️❤️❤️</div></div>
         <div class="side-panel" id="p2"><div class="pac-avatar" style="background:#00FFFF; color:#00FFFF"></div><div class="player-name-ui" id="n2">P3</div><div class="stat-label">SCORE</div><div class="score-box" id="s2">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l2">❤️❤️❤️</div></div>
@@ -126,7 +121,6 @@
         <div class="side-panel" id="p3"><div class="pac-avatar" style="background:#FF00FF; color:#FF00FF"></div><div class="player-name-ui" id="n3">P4</div><div class="stat-label">SCORE</div><div class="score-box" id="s3">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l3">❤️❤️❤️</div></div>
     </div>
 
-    <!-- GAME OVER -->
     <div id="game-over" class="screen">
         <h1 style="color:red;">GAME OVER</h1>
         <p id="final-score" style="color:white; font-size:14px; margin:20px 0;"></p>
@@ -382,30 +376,27 @@
 
             // ЛОГИКА ЦВЕТА (СИНИЙ / МИГАЮЩИЙ)
             if (isScared) {
-                // Если осталось меньше 2 секунд (120 кадров), мигаем
+                // Мигание в конце (последние 2 секунды)
                 if (frightenedTimer < 120 && Math.floor(Date.now() / 200) % 2 === 0) {
-                    bodyColor = '#FFFFFF'; // Белая вспышка
+                    bodyColor = '#FFFFFF';
                 } else {
-                    bodyColor = '#1919A6'; // Темно-синий
+                    bodyColor = '#1919A6';
                 }
             }
 
             ctx.fillStyle = bodyColor;
             ctx.beginPath();
-            // Голова
             ctx.arc(cx, cy - 2, 13, Math.PI, 0);
             ctx.lineTo(cx + 13, cy + 13);
 
             // Ноги / Зигзаг
             if (isScared) {
-                // Рисуем зигзаг (испуганный)
                 const waveWidth = 6;
                 for (let i = 1; i <= 4; i++) {
                     ctx.lineTo(cx + 13 - waveWidth * i + waveWidth/2, cy + 10);
                     ctx.lineTo(cx + 13 - waveWidth * i, cy + 13);
                 }
             } else {
-                // Обычные ножки (3 штуки)
                 for(let i=1; i<=3; i++) {
                     ctx.lineTo(cx + 13 - 26/3*i + 26/6, cy + 10);
                     ctx.lineTo(cx + 13 - 26/3*i, cy + 13);
@@ -416,13 +407,12 @@
 
             // ЛИЦО
             if (isScared) {
-                // Испуганное лицо (маленькие глазки + зигзаг рот)
                 const faceColor = (bodyColor === '#FFFFFF') ? '#FF0000' : '#FFB8FF';
                 ctx.fillStyle = faceColor;
                 // Глаза
                 ctx.fillRect(cx - 5, cy - 2, 2, 2);
                 ctx.fillRect(cx + 3, cy - 2, 2, 2);
-                // Рот
+                // Рот (зигзаг)
                 ctx.strokeStyle = faceColor;
                 ctx.lineWidth = 1;
                 ctx.beginPath();
@@ -457,6 +447,7 @@
             else if (s.countdown > -1) { cdEl.style.display = 'block'; cdEl.innerText = "GO!"; } 
             else { cdEl.style.display = 'none'; }
             
+            // Обновление музыки
             if (Date.now() - (s.startTime || 0) > 4000 || s.countdown < 0) {
                 if(s.frightenedTimer > 0) synth.checkSirenUpdate('power');
                 else synth.checkSirenUpdate('normal');
@@ -467,12 +458,12 @@
             const startRow = Math.floor(camY / TILE_SIZE) - 2;
             const endRow = startRow + (canvas.height / TILE_SIZE) + 4;
 
+            // РИСОВАНИЕ КАРТЫ
             for (let y = startRow; y <= endRow; y++) {
                 if (!s.rows[y]) continue;
                 const sy = (y * TILE_SIZE - camY) | 0;
                 for (let x = 0; x < 20; x++) {
-                    const t = s.rows[y][x]; 
-                    const sx = x * TILE_SIZE;
+                    const t = s.rows[y][x]; const sx = x * TILE_SIZE;
                     
                     if (t === 1) { // WALL
                         ctx.fillStyle = '#1919A6';
@@ -497,7 +488,7 @@
                 }
             }
 
-            // Рисуем призраков с передачей таймера страха!
+            // РИСОВАНИЕ ПРИЗРАКОВ С АНИМАЦИЕЙ СМЕРТИ
             s.ghosts.forEach(g => drawGhost(ctx, g.x, g.y - camY, g.color, g.vx, g.vy, s.frightenedTimer));
             
             for(let i=0; i<4; i++) document.getElementById(`p${i}`).classList.remove('active');
@@ -513,6 +504,22 @@
                 if(p.id === socket.id && p.score > prevScore) { synth.playWaka(); prevScore = p.score; }
                 if(!p.alive) continue;
                 const sy = p.y - camY;
+                
+                // Анимация смерти игрока
+                if (p.deathTimer > 0) {
+                    // Схлопывание рта (Пакман-смерть)
+                    const progress = 1 - (p.deathTimer / 60); // от 0 до 1
+                    const startAngle = -Math.PI/2 + (progress * Math.PI);
+                    const endAngle = -Math.PI/2 + (2*Math.PI - progress * Math.PI);
+                    
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.moveTo(p.x + 15, sy + 15);
+                    ctx.arc(p.x + 15, sy + 15, 12, startAngle, endAngle);
+                    ctx.fill();
+                    continue;
+                }
+
                 if(p.invulnTimer > 0 && Date.now()%200 < 100) continue;
                 ctx.fillStyle = (p.pvpTimer > 0) ? '#9900FF' : p.color; 
                 ctx.beginPath();
@@ -530,7 +537,6 @@
             if(s.countdown > 0) { deathZoneY = canvas.height + 100; } else { deathZoneY += (targetY - deathZoneY) * 0.02; }
             const time = Date.now()/200;
             const gCols = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
-            // Отрисовка волны смерти (призраки внизу) - здесь таймер страха не нужен, они всегда нормальные
             for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5)*5; drawGhost(ctx, i*30, deathZoneY + waveY, gCols[i%4], 0, -1, 0); }
             for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5 + 2)*5; drawGhost(ctx, i*30-15, deathZoneY + 15 + waveY, gCols[(i+2)%4], 0, -1, 0); }
         });
