@@ -14,7 +14,14 @@ app.use(express.static('public'));
 // --- КОНФИГУРАЦИЯ ---
 const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
-const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
+
+// ОСТАВИЛИ 4 ЦВЕТА (Убрали Lime и White)
+const PLAYER_COLORS = [
+    '#FFFF00', // Yellow
+    '#00FF00', // Green
+    '#BF00FF', // Purple
+    '#0055FF'  // Deep Blue
+];
 
 const CAM_SPEED_START = 0.8;
 const CAM_SPEED_MAX   = 3.0;
@@ -111,10 +118,43 @@ function createGame(roomId) {
             rockets: []
         }
     };
+    
+    initMap(game);
+    return game;
+}
+
+function initMap(game) {
+    game.rows = {};
+    game.cameraY = 0;
+    game.patternRowIndex = 0;
+    game.currentPattern = null;
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
-    game.changes = { removedDots: [], newRows: {} }; 
-    return game;
+    game.changes = { removedDots: [], newRows: {} };
+}
+
+function resetGame(game) {
+    game.isRunning = false;
+    game.ghosts = [];
+    game.gameSpeed = CAM_SPEED_START;
+    game.frightenedTimer = 0;
+    game.nextGhostSpawn = -400;
+    game.speedBoostTimer = 0;
+    game.globalThreshold = 0;
+    game.frameCounter = 0;
+    game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
+    
+    initMap(game);
+
+    for (let pid in game.players) {
+        const p = game.players[pid];
+        p.x = (4 + p.colorIdx * 4) * TILE_SIZE;
+        p.y = 22 * TILE_SIZE;
+        p.vx = 0; p.vy = 0; p.nextDir = null;
+        p.score = 0; p.lives = 3; p.alive = true;
+        p.invulnTimer = 0; p.pvpTimer = 0; p.deathTimer = 0;
+        p.stats = { cherries: 0, ghosts: 0, players: 0, evil: 0 };
+    }
 }
 
 function generateRow(game, yIndex) {
@@ -176,7 +216,8 @@ io.on('connection', (socket) => {
         
         game.players[socket.id] = {
             id: socket.id, name: (nickname || `P${myIdx+1}`).substring(0, 10).toUpperCase(),
-            colorIdx: myIdx, color: COLORS[myIdx], 
+            colorIdx: myIdx, 
+            color: PLAYER_COLORS[myIdx], 
             x: (4 + myIdx * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
@@ -189,6 +230,20 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: roomId });
     }
 
+    socket.on('changeColor', (colorIndex) => {
+        if (currentRoom && lobbies[currentRoom] && !lobbies[currentRoom].isRunning) {
+            const p = lobbies[currentRoom].players[socket.id];
+            if (p && PLAYER_COLORS[colorIndex]) {
+                p.color = PLAYER_COLORS[colorIndex];
+                io.to(currentRoom).emit('lobbyUpdate', { 
+                    players: Object.values(lobbies[currentRoom].players), 
+                    hostId: lobbies[currentRoom].hostId, 
+                    roomId: currentRoom 
+                });
+            }
+        }
+    });
+
     socket.on('startGame', () => {
         if (currentRoom && lobbies[currentRoom] && lobbies[currentRoom].hostId === socket.id) {
             lobbies[currentRoom].isRunning = true;
@@ -196,6 +251,18 @@ io.on('connection', (socket) => {
             lobbies[currentRoom].startTime = Date.now();
             io.to(currentRoom).emit('fullMap', lobbies[currentRoom].rows);
             io.to(currentRoom).emit('gameStarted');
+        }
+    });
+
+    socket.on('returnToLobby', () => {
+        if (currentRoom && lobbies[currentRoom]) {
+            const game = lobbies[currentRoom];
+            resetGame(game);
+            io.to(currentRoom).emit('lobbyUpdate', { 
+                players: Object.values(game.players), 
+                hostId: game.hostId, 
+                roomId: currentRoom 
+            });
         }
     });
 
@@ -235,13 +302,9 @@ setInterval(() => {
         if (game.countdown > -1) game.countdown -= 1/60;
         
         if (game.countdown > 0) {
-            // Отправляем данные чаще во время отсчета (каждый 2-й тик = 30 раз в сек)
             if (tickCount % 2 === 0) {
                 io.to(roomId).emit('state', { 
-                    t: Date.now(), 
-                    cd: game.countdown, 
-                    players: game.players,
-                    camY: game.cameraY, 
+                    t: Date.now(), cd: game.countdown, players: game.players, camY: game.cameraY, 
                     rockets: [], warnings: [], ghosts: [] 
                 });
             }
@@ -250,7 +313,6 @@ setInterval(() => {
         
         updateGamePhysics(game);
 
-        // УВЕЛИЧЕНА ЧАСТОТА: Каждый 2-й тик (30 FPS)
         if (tickCount % 2 === 0) {
             const fastPlayers = {};
             for(let pid in game.players) {
@@ -258,9 +320,7 @@ setInterval(() => {
                 fastPlayers[pid] = {
                     id: p.id, name: p.name, colorIdx: p.colorIdx, color: p.color,
                     score: p.score, lives: p.lives, alive: p.alive,
-                    // ТОЧНОСТЬ: Оставляем 2 знака после запятой (было 1) для плавности
-                    x: Math.round(p.x * 100) / 100, 
-                    y: Math.round(p.y * 100) / 100,
+                    x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100,
                     vx: p.vx, vy: p.vy,
                     deathTimer: p.deathTimer, invulnTimer: p.invulnTimer, pvpTimer: p.pvpTimer
                 };
@@ -273,15 +333,11 @@ setInterval(() => {
 
             const s = { 
                 t: Date.now(), 
-                camY: Math.round(game.cameraY * 100) / 100, // Высокая точность камеры
-                players: fastPlayers, 
-                ghosts: fastGhosts, 
-                ft: game.frightenedTimer, 
-                st: game.startTime, 
-                changes: game.changes, 
-                sbt: game.speedBoostTimer,
-                rockets: game.rocketState.rockets, 
-                warnings: game.rocketState.warnings
+                camY: Math.round(game.cameraY * 100) / 100, 
+                players: fastPlayers, ghosts: fastGhosts, 
+                ft: game.frightenedTimer, st: game.startTime, 
+                changes: game.changes, sbt: game.speedBoostTimer,
+                rockets: game.rocketState.rockets, warnings: game.rocketState.warnings
             };
 
             io.to(roomId).emit('state', s);
