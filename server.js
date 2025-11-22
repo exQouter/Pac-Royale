@@ -91,11 +91,73 @@ function makeId(length) {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- ПАТТЕРНЫ ---
+// --- НОВЫЕ ПАТТЕРНЫ (Плотные лабиринты, узкие проходы) ---
 const PATTERNS = [
-    [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,0,1,1], [1,0,0,0,0,0,1,0,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,0,1,1,1,1]],
-    [[1,0,0,0,1,0,0,0,0,0], [1,0,1,0,1,0,1,1,1,1], [1,0,1,0,1,0,0,0,0,0], [1,0,1,0,0,0,1,1,1,0], [1,0,1,1,1,0,1,3,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,1,1,0,1,1], [1,0,0,0,0,0,0,0,0,1], [1,1,1,0,1,1,1,1,0,1]],
-    [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,0,1,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,1,0,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,1,1,1], [1,0,0,3,0,0,0,0,0,1], [1,0,1,1,0,1,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,1,1,0,1,1,1,1,0,1]]
+    // 1. DENSE MAZE (Классический плотный лабиринт)
+    [
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,1,1,1,0,1],
+        [1,0,1,0,0,0,0,1,0,1],
+        [1,0,1,0,1,1,0,1,0,1],
+        [1,0,0,0,1,1,0,0,0,1],
+        [1,0,1,1,1,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,1,0,1],
+        [1,0,1,0,0,0,0,1,0,1],
+        [1,1,1,0,1,1,0,1,1,1]
+    ],
+    // 2. VERTICAL STRIPS (Вертикальные полосы с редкими проходами)
+    [
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,0,0,0,0,1,0], // Проход
+        [1,0,1,1,1,0,1,1,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,0,0,1,0,1,0,0,0], // Проход
+        [1,0,1,1,1,0,1,1,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,1,0,1,0,1,0]
+    ],
+    // 3. THE GRID (Сетка / Кварталы)
+    [
+        [1,0,0,0,0,0,0,0,0,0],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0], // Перекресток
+        [1,0,1,1,0,3,1,1,0,1],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0], // Перекресток
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0]
+    ],
+    // 4. SNAKE PATHS (Извилистые пути)
+    [
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,1,0,0,1],
+        [1,0,1,1,1,1,1,0,1,1],
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,1,0,1,1,1,1,1,0,1],
+        [1,0,0,1,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,1,1,1],
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,0,1,1,1,1]
+    ],
+    // 5. TETRIS (Блоки разной формы)
+    [
+        [1,0,0,0,1,1,0,0,0,1],
+        [1,0,1,0,0,0,0,1,0,1],
+        [1,0,1,1,1,0,1,1,0,1],
+        [1,0,0,0,1,0,1,0,0,1],
+        [1,1,1,0,0,0,0,0,1,1],
+        [1,0,0,0,1,1,1,0,0,1],
+        [1,0,1,0,1,0,1,0,1,1],
+        [1,0,1,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,1]
+    ]
 ];
 
 function createGame(roomId) {
@@ -133,7 +195,6 @@ function initMap(game) {
     game.changes = { removedDots: [], newRows: {} };
 }
 
-// ИСПРАВЛЕННАЯ ФУНКЦИЯ СБРОСА
 function resetGame(game) {
     game.isRunning = false;
     game.ghosts = [];
@@ -147,18 +208,13 @@ function resetGame(game) {
     
     initMap(game);
 
-    // Проходим по всем игрокам в памяти комнаты
     for (let pid in game.players) {
-        // ВАЖНО: Проверяем, подключен ли этот сокет сейчас к серверу
         const socketConnected = io.sockets.sockets.get(pid);
-
         if (!socketConnected) {
-            // Если сокета нет (игрок закрыл вкладку), удаляем его из игры
             delete game.players[pid];
             continue;
         }
 
-        // Если игрок на месте, сбрасываем его статы
         const p = game.players[pid];
         p.x = (4 + p.colorIdx * 4) * TILE_SIZE;
         p.y = 22 * TILE_SIZE;
@@ -184,10 +240,27 @@ function generateRow(game, yIndex) {
     }
 
     for(let i = 0; i < 10; i++) { 
-        const val = half[i], right = 19 - i;
-        if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
-        else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
-        else { row[i] = getContent(); row[right] = getContent(); }
+        let val = half[i];
+        
+        // --- SAFETY LANE MECHANIC (Линии безопасности) ---
+        // 3-я колонка (индекс 2) всегда проходима с вероятностью 85%.
+        // Это предотвращает полные тупики в плотных лабиринтах.
+        if (i === 2 && Math.random() > 0.15) {
+            val = 0;
+        }
+        
+        const right = 19 - i;
+        
+        if (val === 1) { 
+            row[i] = TILE.WALL; 
+            row[right] = TILE.WALL; 
+        } else if (val === 3) { 
+            row[i] = TILE.POWER; 
+            row[right] = TILE.POWER; 
+        } else { 
+            row[i] = getContent(); 
+            row[right] = getContent(); 
+        }
     }
     game.rows[yIndex] = row;
     if (!game.changes.newRows) game.changes.newRows = {};
@@ -220,24 +293,42 @@ io.on('connection', (socket) => {
         const game = lobbies[roomId];
         if (game.isRunning) { socket.emit('errorMsg', 'Game already started'); return; }
         
-        const usedIdx = Object.values(game.players).map(p => p.colorIdx);
-        let myIdx = -1;
-        for(let i=0; i<4; i++) if(!usedIdx.includes(i)) { myIdx = i; break; }
+        const currentPlayers = Object.values(game.players);
+        const usedSlots = currentPlayers.map(p => p.colorIdx);
+        let mySlot = -1;
+        for(let i=0; i<4; i++) if(!usedSlots.includes(i)) { mySlot = i; break; }
         
-        if(myIdx === -1) { socket.emit('errorMsg', 'Lobby full'); return; }
+        if(mySlot === -1) { socket.emit('errorMsg', 'Lobby full'); return; }
         
+        const usedColors = currentPlayers.map(p => p.color);
+        let myColor = null;
+        
+        if (!usedColors.includes(PLAYER_COLORS[mySlot])) {
+            myColor = PLAYER_COLORS[mySlot];
+        } else {
+            for (let color of PLAYER_COLORS) {
+                if (!usedColors.includes(color)) {
+                    myColor = color;
+                    break;
+                }
+            }
+        }
+        
+        if (!myColor) myColor = PLAYER_COLORS[0];
+
         game.players[socket.id] = {
-            id: socket.id, name: (nickname || `P${myIdx+1}`).substring(0, 10).toUpperCase(),
-            colorIdx: myIdx, 
-            color: PLAYER_COLORS[myIdx], 
-            x: (4 + myIdx * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
+            id: socket.id, 
+            name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
+            colorIdx: mySlot, 
+            color: myColor, 
+            x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
             stats: { cherries: 0, ghosts: 0, players: 0, evil: 0 }
         };
         currentRoom = roomId;
         socket.join(roomId);
-        socket.emit('init', { id: socket.id, colorIdx: myIdx });
+        socket.emit('init', { id: socket.id, colorIdx: mySlot });
         socket.emit('fullMap', game.rows);
         io.to(roomId).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: roomId });
     }
@@ -273,9 +364,7 @@ io.on('connection', (socket) => {
     socket.on('returnToLobby', () => {
         if (currentRoom && lobbies[currentRoom]) {
             const game = lobbies[currentRoom];
-            // Сначала чистим отключившихся
             resetGame(game);
-            // Потом шлем обновление
             io.to(currentRoom).emit('lobbyUpdate', { 
                 players: Object.values(game.players), 
                 hostId: game.hostId, 

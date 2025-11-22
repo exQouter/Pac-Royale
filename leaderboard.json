@@ -9,6 +9,10 @@
   },
   {
     "name": "PLAYER",
+    "score": 1630
+  },
+  {
+    "name": "PLAYER",
     "score": 1360
   },
   {
@@ -34,9 +38,5 @@
   {
     "name": "PLAYER",
     "score": 490
-  },
-  {
-    "name": "ФКЕ",
-    "score": 450
   }
 ]
