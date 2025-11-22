@@ -113,7 +113,9 @@ function createGame(roomId) {
     };
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
-    game.changes.newRows = {}; 
+    
+    // Инициализируем пустым, чтобы не было undefined
+    game.changes = { removedDots: [], newRows: {} }; 
     return game;
 }
 
@@ -138,6 +140,9 @@ function generateRow(game, yIndex) {
         else { row[i] = getContent(); row[right] = getContent(); }
     }
     game.rows[yIndex] = row;
+    
+    // ВАЖНО: Добавляем в изменения, которые будут отправлены позже
+    if (!game.changes.newRows) game.changes.newRows = {};
     game.changes.newRows[yIndex] = row;
 
     const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 45;
@@ -234,23 +239,22 @@ setInterval(() => {
         
         if (game.countdown > -1) game.countdown -= 1/60;
         
-        game.changes = { removedDots: [], newRows: {} };
+        // ВАЖНО: Мы НЕ очищаем game.changes здесь, иначе потеряем данные за пропущенные кадры
         
         if (game.countdown > 0) {
-            // Шлем стартовый отсчет (ОБЯЗАТЕЛЬНО С camY!)
             if (tickCount % 3 === 0) {
                 io.to(roomId).emit('state', { 
                     t: Date.now(), 
                     cd: game.countdown, 
                     players: game.players,
-                    camY: game.cameraY, // ИСПРАВЛЕНИЕ: Добавлено поле camY
-                    rockets: [], warnings: [], ghosts: [] // Пустые массивы для безопасности
+                    camY: game.cameraY,
+                    rockets: [], warnings: [], ghosts: []
                 });
             }
             continue;
         }
         
-        // Физику считаем каждый тик (60 раз/сек)
+        // Физику считаем каждый тик (60 раз/сек) -> это наполняет game.changes
         updateGamePhysics(game);
 
         // Отправляем данные только каждый 3-й тик (20 раз/сек)
@@ -279,13 +283,16 @@ setInterval(() => {
                 ghosts: fastGhosts, 
                 ft: game.frightenedTimer, 
                 st: game.startTime, 
-                changes: game.changes, 
+                changes: game.changes, // Отправляем накопленные изменения
                 sbt: game.speedBoostTimer,
                 rockets: game.rocketState.rockets, 
                 warnings: game.rocketState.warnings
             };
 
             io.to(roomId).emit('state', s);
+            
+            // ВАЖНО: Очищаем список изменений ТОЛЬКО после отправки
+            game.changes = { removedDots: [], newRows: {} };
         }
     }
 }, 1000 / 60);
@@ -418,7 +425,11 @@ function updateGamePhysics(game) {
         const tile = getTile(game, gx, gy);
         if(tile > TILE.WALL) {
             game.rows[gy][gx] = TILE.EMPTY;
+            
+            // ВАЖНО: Добавляем в изменения, которые будут отправлены позже
+            if(!game.changes.removedDots) game.changes.removedDots = [];
             game.changes.removedDots.push({x: gx, y: gy});
+            
             if(tile === TILE.DOT) { p.score += 10; }
             else if(tile === TILE.POWER) { p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.CHERRY) { p.score += 100; p.stats.cherries++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100"}); io.to(game.id).emit('sfx', 'eatFruit'); }
