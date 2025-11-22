@@ -62,6 +62,7 @@
         .color-picker { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
         .color-swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #333; cursor: pointer; transition: transform 0.1s; }
         .color-swatch:hover { transform: scale(1.2); border-color: #fff; }
+        .color-swatch.disabled { opacity: 0.2; cursor: not-allowed; transform: none; border-color: #333; }
     </style>
 </head>
 <body>
@@ -88,11 +89,11 @@
         
         <!-- Цветовая палитра -->
         <div style="margin-top: 10px; font-size: 10px; color: #ccc;">CHOOSE COLOR:</div>
-        <div class="color-picker">
-            <div class="color-swatch" style="background: #FFFF00;" onclick="selectColor(0)"></div>
-            <div class="color-swatch" style="background: #00FF00;" onclick="selectColor(1)"></div>
-            <div class="color-swatch" style="background: #BF00FF;" onclick="selectColor(2)"></div>
-            <div class="color-swatch" style="background: #0055FF;" onclick="selectColor(3)"></div>
+        <div class="color-picker" id="color-picker-container">
+            <div class="color-swatch" data-idx="0" style="background: #FFFF00;" onclick="selectColor(0)"></div>
+            <div class="color-swatch" data-idx="1" style="background: #00FF00;" onclick="selectColor(1)"></div>
+            <div class="color-swatch" data-idx="2" style="background: #BF00FF;" onclick="selectColor(2)"></div>
+            <div class="color-swatch" data-idx="3" style="background: #0055FF;" onclick="selectColor(3)"></div>
         </div>
 
         <div class="lobby-container">
@@ -146,6 +147,8 @@
         const TILE_SIZE = 30;
         const urlParams = new URLSearchParams(window.location.search);
         
+        const PLAYER_COLORS = ['#FFFF00', '#00FF00', '#BF00FF', '#0055FF'];
+
         let isJoined = false;
         let isSpectating = false; 
         let popups = [];
@@ -179,6 +182,7 @@
             playWarning() { const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(600,t); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.05); g.gain.setValueAtTime(0.15,t+0.3); g.gain.linearRampToValueAtTime(0,t+0.35); g.gain.linearRampToValueAtTime(0.15,t+0.7); g.gain.setValueAtTime(0.15,t+0.95); g.gain.linearRampToValueAtTime(0,t+1.0); g.gain.linearRampToValueAtTime(0.15,t+1.35); g.gain.setValueAtTime(0.15,t+1.6); g.gain.linearRampToValueAtTime(0,t+1.65); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+1.7); }
             playRocket() { const t=this.ctx.currentTime; const noise=this.ctx.createBufferSource(); noise.buffer=this.createNoiseBuffer(); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(800,t); f.frequency.exponentialRampToValueAtTime(100,t+1.0); const g=this.ctx.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.01,t+1.0); noise.connect(f); f.connect(g); g.connect(this.masterGain); noise.start(t); }
             createNoiseBuffer() { const b = this.ctx.createBuffer(1, this.ctx.sampleRate*1.5, this.ctx.sampleRate); const d = b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+            stopAll() { this.stopSiren(); if(this.ctx.state==='running') this.ctx.suspend(); }
         }
         const synth = new PacmanSynth();
 
@@ -197,6 +201,23 @@
         function renderLobbySlots(players) { 
             for(let i=0; i<4; i++) { const s=document.getElementById(`slot-${i}`); s.className='lobby-slot'; s.innerHTML=`<div class="slot-label">PLAYER ${i+1}</div><div class="waiting-anim">WAITING...</div>`; } 
             players.forEach(p => { const s=document.getElementById(`slot-${p.colorIdx}`); if(s) { s.classList.add('filled'); s.innerHTML=`<div class="slot-label" style="color:${p.color}">PLAYER ${p.colorIdx+1}</div><div class="slot-pacman" style="--slot-color:${p.color};"></div><div class="slot-name">${p.name}</div>`; } }); 
+            
+            // Обновление доступности цветов
+            const usedColors = players.map(p => p.color);
+            document.querySelectorAll('.color-swatch').forEach((el, idx) => {
+                const myColor = PLAYER_COLORS[idx];
+                // Если цвет занят И это не мой текущий цвет (если я уже выбрал) - блокируем
+                // Но для простоты: просто блокируем все занятые цвета, кроме того, что выбрал "Я" (через сокет не узнать "мой" цвет напрямую здесь без id, но мы знаем игроков)
+                const takenByOthers = players.some(p => p.color === myColor && p.id !== socket.id);
+                
+                if (takenByOthers) {
+                    el.classList.add('disabled');
+                    el.onclick = null;
+                } else {
+                    el.classList.remove('disabled');
+                    el.onclick = () => selectColor(idx);
+                }
+            });
         }
         
         function selectColor(index) {
@@ -234,6 +255,7 @@
             canvas.style.display = 'block'; 
             isJoined = true; 
             isSpectating = false; 
+            synth.resume();
             synth.playIntro(); 
             setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 4000); 
             requestAnimationFrame(renderLoop); 
@@ -264,13 +286,29 @@
             
             document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherryIcon}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
             
+            // ЛОГИКА КНОПКИ PLAY AGAIN
+            const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
+            const btnText = data.allDead ? 'PLAY AGAIN 🏠' : 'WAITING...';
+            
             document.getElementById('go-buttons').innerHTML = `
                 <button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!data.leaderboard.some(p=>p.alive)?'disabled':''}>SPECTATE 👁️</button>
-                <button class="btn-play-again" onclick="returnToLobby()">PLAY AGAIN 🏠</button>
+                <button id="btn-replay" class="btn-play-again" onclick="returnToLobby()" ${btnState}>${btnText}</button>
                 <button class="btn-main-menu" onclick="location.reload()">MAIN MENU 🔙</button>
             `;
             
-            const po={}; data.leaderboard.forEach(p=>po[p.name]=p); updateLeaderboardHTML(po); synth.stopSiren(); 
+            const po={}; data.leaderboard.forEach(p=>po[p.name]=p); updateLeaderboardHTML(po); 
+            synth.stopSiren(); 
+        });
+
+        socket.on('matchEnded', () => {
+            const btn = document.getElementById('btn-replay');
+            if(btn) {
+                btn.disabled = false;
+                btn.style.background = '#00FF00';
+                btn.style.cursor = 'pointer';
+                btn.innerText = 'PLAY AGAIN 🏠';
+            }
+            synth.stopAll(); // Остановить все звуки
         });
 
         socket.on('leaderboardUpdate', d => leaderboardData = d);
@@ -331,7 +369,11 @@
                     } else if (t === 2) { ctx.fillStyle = '#ffb8ae'; ctx.fillRect(sx+13, sy+13, 4, 4);
                     } else if (t === 3) { ctx.fillStyle = (now%400 < 200) ? '#fff' : '#ffb8ae'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
                     } else if (t === 4) { ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
-                    } else if (t === 5) { ctx.fillStyle = '#9900ff'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
+                    } else if (t === 5) { 
+                        // EVIL (Tile 5) - ТЕПЕРЬ КРАСНЫЙ
+                        ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); 
+                        ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); 
+                        ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
                     } else if (t === 6) { ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(sx+15, sy+10); ctx.bezierCurveTo(sx+15, sy+8, sx+12, sy+5, sx+8, sy+5); ctx.bezierCurveTo(sx+2, sy+5, sx+2, sy+14, sx+15, sy+22); ctx.bezierCurveTo(sx+28, sy+14, sx+28, sy+5, sx+22, sy+5); ctx.bezierCurveTo(sx+18, sy+5, sx+15, sy+8, sx+15, sy+10); ctx.fill(); }
                 }
             }
@@ -379,7 +421,11 @@
                 const ix = visualPlayers[id].x, iy = visualPlayers[id].y, sy = iy - visualCamY;
                 if (p.deathTimer > 0) { const pr = 1 - (p.deathTimer / 60), sa = -Math.PI/2 + (pr * Math.PI), ea = -Math.PI/2 + (2*Math.PI - pr * Math.PI); ctx.fillStyle = p.color; ctx.beginPath(); ctx.moveTo(ix + 15, sy + 15); ctx.arc(ix + 15, sy + 15, 12, sa, ea); ctx.fill(); continue; }
                 if(p.invulnTimer > 0 && now%200 < 100) continue;
-                ctx.fillStyle = (p.pvpTimer > 0) ? '#9900FF' : p.color; ctx.beginPath();
+                
+                // ЦВЕТ ИГРОКА (Если PVP - то Красный, иначе свой)
+                ctx.fillStyle = (p.pvpTimer > 0) ? '#FF0000' : p.color; 
+                
+                ctx.beginPath();
                 if(p.vx > 0) lastAngles[id] = 0; else if(p.vy > 0) lastAngles[id] = Math.PI/2; else if(p.vx < 0) lastAngles[id] = Math.PI; else if(p.vy < 0) lastAngles[id] = -Math.PI/2;
                 const ang = lastAngles[id] !== undefined ? lastAngles[id] : 0, m = 0.2 + (Math.sin(now/50)+1)/10;
                 ctx.arc(ix+15, sy+15, 12, ang + m*Math.PI, ang + (2-m)*Math.PI); ctx.lineTo(ix+15, sy+15); ctx.fill();
