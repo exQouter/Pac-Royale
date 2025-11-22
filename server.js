@@ -113,8 +113,6 @@ function createGame(roomId) {
     };
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
-    
-    // Инициализируем пустым, чтобы не было undefined
     game.changes = { removedDots: [], newRows: {} }; 
     return game;
 }
@@ -140,8 +138,6 @@ function generateRow(game, yIndex) {
         else { row[i] = getContent(); row[right] = getContent(); }
     }
     game.rows[yIndex] = row;
-    
-    // ВАЖНО: Добавляем в изменения, которые будут отправлены позже
     if (!game.changes.newRows) game.changes.newRows = {};
     game.changes.newRows[yIndex] = row;
 
@@ -228,7 +224,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// --- ГЛАВНЫЙ ЦИКЛ СЕРВЕРА ---
 let tickCount = 0;
 
 setInterval(() => {
@@ -239,33 +234,33 @@ setInterval(() => {
         
         if (game.countdown > -1) game.countdown -= 1/60;
         
-        // ВАЖНО: Мы НЕ очищаем game.changes здесь, иначе потеряем данные за пропущенные кадры
-        
         if (game.countdown > 0) {
-            if (tickCount % 3 === 0) {
+            // Отправляем данные чаще во время отсчета (каждый 2-й тик = 30 раз в сек)
+            if (tickCount % 2 === 0) {
                 io.to(roomId).emit('state', { 
                     t: Date.now(), 
                     cd: game.countdown, 
                     players: game.players,
-                    camY: game.cameraY,
-                    rockets: [], warnings: [], ghosts: []
+                    camY: game.cameraY, 
+                    rockets: [], warnings: [], ghosts: [] 
                 });
             }
             continue;
         }
         
-        // Физику считаем каждый тик (60 раз/сек) -> это наполняет game.changes
         updateGamePhysics(game);
 
-        // Отправляем данные только каждый 3-й тик (20 раз/сек)
-        if (tickCount % 3 === 0) {
+        // УВЕЛИЧЕНА ЧАСТОТА: Каждый 2-й тик (30 FPS)
+        if (tickCount % 2 === 0) {
             const fastPlayers = {};
             for(let pid in game.players) {
                 const p = game.players[pid];
                 fastPlayers[pid] = {
                     id: p.id, name: p.name, colorIdx: p.colorIdx, color: p.color,
                     score: p.score, lives: p.lives, alive: p.alive,
-                    x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
+                    // ТОЧНОСТЬ: Оставляем 2 знака после запятой (было 1) для плавности
+                    x: Math.round(p.x * 100) / 100, 
+                    y: Math.round(p.y * 100) / 100,
                     vx: p.vx, vy: p.vy,
                     deathTimer: p.deathTimer, invulnTimer: p.invulnTimer, pvpTimer: p.pvpTimer
                 };
@@ -278,20 +273,18 @@ setInterval(() => {
 
             const s = { 
                 t: Date.now(), 
-                camY: Math.round(game.cameraY * 10) / 10, 
+                camY: Math.round(game.cameraY * 100) / 100, // Высокая точность камеры
                 players: fastPlayers, 
                 ghosts: fastGhosts, 
                 ft: game.frightenedTimer, 
                 st: game.startTime, 
-                changes: game.changes, // Отправляем накопленные изменения
+                changes: game.changes, 
                 sbt: game.speedBoostTimer,
                 rockets: game.rocketState.rockets, 
                 warnings: game.rocketState.warnings
             };
 
             io.to(roomId).emit('state', s);
-            
-            // ВАЖНО: Очищаем список изменений ТОЛЬКО после отправки
             game.changes = { removedDots: [], newRows: {} };
         }
     }
@@ -425,8 +418,6 @@ function updateGamePhysics(game) {
         const tile = getTile(game, gx, gy);
         if(tile > TILE.WALL) {
             game.rows[gy][gx] = TILE.EMPTY;
-            
-            // ВАЖНО: Добавляем в изменения, которые будут отправлены позже
             if(!game.changes.removedDots) game.changes.removedDots = [];
             game.changes.removedDots.push({x: gx, y: gy});
             
