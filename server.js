@@ -45,6 +45,13 @@ const ROCKET_WAVE_INTERVAL = 180;
 const ROCKET_WARNING_TIME = 120; 
 const ROCKET_Y_OFFSET = 720; 
 
+// SURGE (Цунами) SETTINGS
+const SURGE_MIN_INTERVAL = 3600;  // 1 минута (60 fps * 60)
+const SURGE_MAX_INTERVAL = 18000; // 5 минут (60 fps * 300)
+const SURGE_RISE_TIME = 600;      // 10 секунд на подъем
+const SURGE_RETURN_TIME = 180;    // 3 секунды на возврат
+const SURGE_MAX_HEIGHT = 240;     // 30% от 800px
+
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
 
 const lobbies = {};
@@ -91,11 +98,73 @@ function makeId(length) {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- ПАТТЕРНЫ ---
+// --- НОВЫЕ ПАТТЕРНЫ (Плотные лабиринты, узкие проходы) ---
 const PATTERNS = [
-    [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,0,1,1], [1,0,0,0,0,0,1,0,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,0,1,1,1,1]],
-    [[1,0,0,0,1,0,0,0,0,0], [1,0,1,0,1,0,1,1,1,1], [1,0,1,0,1,0,0,0,0,0], [1,0,1,0,0,0,1,1,1,0], [1,0,1,1,1,0,1,3,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,1,1,0,1,1], [1,0,0,0,0,0,0,0,0,1], [1,1,1,0,1,1,1,1,0,1]],
-    [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,0,1,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,1,0,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,1,1,1], [1,0,0,3,0,0,0,0,0,1], [1,0,1,1,0,1,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,1,1,0,1,1,1,1,0,1]]
+    // 1. DENSE MAZE
+    [
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,1,1,1,0,1],
+        [1,0,1,0,0,0,0,1,0,1],
+        [1,0,1,0,1,1,0,1,0,1],
+        [1,0,0,0,1,1,0,0,0,1],
+        [1,0,1,1,1,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,1,0,1],
+        [1,0,1,0,0,0,0,1,0,1],
+        [1,1,1,0,1,1,0,1,1,1]
+    ],
+    // 2. VERTICAL STRIPS
+    [
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,0,0,0,0,1,0],
+        [1,0,1,1,1,0,1,1,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,0,0,1,0,1,0,0,0],
+        [1,0,1,1,1,0,1,1,1,0],
+        [1,0,1,0,1,0,1,0,1,0],
+        [1,0,1,0,1,0,1,0,1,0]
+    ],
+    // 3. THE GRID
+    [
+        [1,0,0,0,0,0,0,0,0,0],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0],
+        [1,0,1,1,0,3,1,1,0,1],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,1,1,0,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0]
+    ],
+    // 4. SNAKE PATHS
+    [
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,1,0,0,1],
+        [1,0,1,1,1,1,1,0,1,1],
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,1,0,1,1,1,1,1,0,1],
+        [1,0,0,1,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,1,1,1],
+        [1,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,0,1,1,1,1]
+    ],
+    // 5. TETRIS
+    [
+        [1,0,0,0,1,1,0,0,0,1],
+        [1,0,1,0,0,0,0,1,0,1],
+        [1,0,1,1,1,0,1,1,0,1],
+        [1,0,0,0,1,0,1,0,0,1],
+        [1,1,1,0,0,0,0,0,1,1],
+        [1,0,0,0,1,1,1,0,0,1],
+        [1,0,1,0,1,0,1,0,1,1],
+        [1,0,1,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,1]
+    ]
 ];
 
 function createGame(roomId) {
@@ -116,6 +185,12 @@ function createGame(roomId) {
             nextWaveTime: 0,
             warnings: [],
             rockets: []
+        },
+        // НОВОЕ: Состояние Цунами
+        surge: {
+            state: 'IDLE', // IDLE, RISING, RETURNING
+            currentHeight: 0,
+            nextTime: 3600 + Math.floor(Math.random() * 7200) // Первый раз через 1-3 минуты
         }
     };
     
@@ -144,6 +219,9 @@ function resetGame(game) {
     game.frameCounter = 0;
     game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
     
+    // Сброс Цунами
+    game.surge = { state: 'IDLE', currentHeight: 0, nextTime: 3600 + Math.floor(Math.random() * 7200) };
+
     initMap(game);
 
     for (let pid in game.players) {
@@ -178,7 +256,10 @@ function generateRow(game, yIndex) {
     }
 
     for(let i = 0; i < 10; i++) { 
-        const val = half[i], right = 19 - i;
+        let val = half[i];
+        if (i === 2 && Math.random() > 0.15) val = 0;
+        
+        const right = 19 - i;
         if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
         else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
         else { row[i] = getContent(); row[right] = getContent(); }
@@ -210,45 +291,26 @@ io.on('connection', (socket) => {
         else socket.emit('errorMsg', 'Lobby not found');
     });
 
-    // ИСПРАВЛЕННАЯ ФУНКЦИЯ ВХОДА
     function joinRoom(socket, roomId, nickname) {
         const game = lobbies[roomId];
         if (game.isRunning) { socket.emit('errorMsg', 'Game already started'); return; }
         
         const currentPlayers = Object.values(game.players);
-
-        // 1. Ищем свободный СЛОТ (0-3) для позиции
         const usedSlots = currentPlayers.map(p => p.colorIdx);
         let mySlot = -1;
         for(let i=0; i<4; i++) if(!usedSlots.includes(i)) { mySlot = i; break; }
         
         if(mySlot === -1) { socket.emit('errorMsg', 'Lobby full'); return; }
         
-        // 2. Ищем свободный ЦВЕТ
         const usedColors = currentPlayers.map(p => p.color);
         let myColor = null;
-        
-        // Проверяем, свободен ли дефолтный цвет для этого слота?
-        if (!usedColors.includes(PLAYER_COLORS[mySlot])) {
-            myColor = PLAYER_COLORS[mySlot];
-        } else {
-            // Если дефолтный занят, берем первый попавшийся свободный
-            for (let color of PLAYER_COLORS) {
-                if (!usedColors.includes(color)) {
-                    myColor = color;
-                    break;
-                }
-            }
-        }
-        
-        // Если все цвета заняты (теоретически невозможно при 4 игроках и 4 цветах), фолбэк
+        if (!usedColors.includes(PLAYER_COLORS[mySlot])) { myColor = PLAYER_COLORS[mySlot]; } 
+        else { for (let color of PLAYER_COLORS) { if (!usedColors.includes(color)) { myColor = color; break; } } }
         if (!myColor) myColor = PLAYER_COLORS[0];
 
         game.players[socket.id] = {
-            id: socket.id, 
-            name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
-            colorIdx: mySlot, 
-            color: myColor, // Назначаем свободный цвет
+            id: socket.id, name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
+            colorIdx: mySlot, color: myColor, 
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
@@ -265,16 +327,10 @@ io.on('connection', (socket) => {
         if (currentRoom && lobbies[currentRoom] && !lobbies[currentRoom].isRunning) {
             const game = lobbies[currentRoom];
             const p = game.players[socket.id];
-            
             const isTaken = Object.values(game.players).some(player => player.id !== socket.id && player.color === PLAYER_COLORS[colorIndex]);
-            
             if (p && PLAYER_COLORS[colorIndex] && !isTaken) {
                 p.color = PLAYER_COLORS[colorIndex];
-                io.to(currentRoom).emit('lobbyUpdate', { 
-                    players: Object.values(game.players), 
-                    hostId: game.hostId, 
-                    roomId: currentRoom 
-                });
+                io.to(currentRoom).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: currentRoom });
             }
         }
     });
@@ -293,11 +349,7 @@ io.on('connection', (socket) => {
         if (currentRoom && lobbies[currentRoom]) {
             const game = lobbies[currentRoom];
             resetGame(game);
-            io.to(currentRoom).emit('lobbyUpdate', { 
-                players: Object.values(game.players), 
-                hostId: game.hostId, 
-                roomId: currentRoom 
-            });
+            io.to(currentRoom).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: currentRoom });
         }
     });
 
@@ -340,7 +392,7 @@ setInterval(() => {
             if (tickCount % 2 === 0) {
                 io.to(roomId).emit('state', { 
                     t: Date.now(), cd: game.countdown, players: game.players, camY: game.cameraY, 
-                    rockets: [], warnings: [], ghosts: [] 
+                    rockets: [], warnings: [], ghosts: [], surgeHeight: 0
                 });
             }
             continue;
@@ -372,7 +424,8 @@ setInterval(() => {
                 players: fastPlayers, ghosts: fastGhosts, 
                 ft: game.frightenedTimer, st: game.startTime, 
                 changes: game.changes, sbt: game.speedBoostTimer,
-                rockets: game.rocketState.rockets, warnings: game.rocketState.warnings
+                rockets: game.rocketState.rockets, warnings: game.rocketState.warnings,
+                surgeHeight: Math.round(game.surge.currentHeight) // Отправляем высоту волны
             };
 
             io.to(roomId).emit('state', s);
@@ -385,65 +438,61 @@ function handleRocketLogic(game) {
     const rs = game.rocketState;
     const fc = game.frameCounter;
 
-    if (!rs.active && fc >= rs.nextCycle) {
-        rs.active = true;
-        rs.wavesLeft = 3;
-        rs.nextWaveTime = fc; 
-    }
+    if (!rs.active && fc >= rs.nextCycle) { rs.active = true; rs.wavesLeft = 3; rs.nextWaveTime = fc; }
 
     if (rs.active) {
         if (rs.wavesLeft > 0 && fc >= rs.nextWaveTime) {
-            rs.wavesLeft--;
-            rs.nextWaveTime = fc + ROCKET_WAVE_INTERVAL; 
-
+            rs.wavesLeft--; rs.nextWaveTime = fc + ROCKET_WAVE_INTERVAL; 
             const patterns = ['CENTER', 'SIDES', 'LEFT', 'RIGHT', 'SYMMETRY'];
             const pat = patterns[Math.floor(Math.random() * patterns.length)];
             let cols = [];
-
-            if (pat === 'CENTER') cols = [8,9,10,11];
-            else if (pat === 'LEFT') cols = [2,3,4,5];
-            else if (pat === 'RIGHT') cols = [14,15,16,17];
-            else if (pat === 'SIDES') cols = [2,3,16,17];
-            else if (pat === 'SYMMETRY') cols = [5,6,13,14];
-
-            cols.forEach(col => {
-                rs.warnings.push({ x: col * TILE_SIZE, y: game.cameraY + ROCKET_Y_OFFSET, timer: ROCKET_WARNING_TIME });
-            });
+            if (pat === 'CENTER') cols = [8,9,10,11]; else if (pat === 'LEFT') cols = [2,3,4,5]; else if (pat === 'RIGHT') cols = [14,15,16,17]; else if (pat === 'SIDES') cols = [2,3,16,17]; else if (pat === 'SYMMETRY') cols = [5,6,13,14];
+            cols.forEach(col => { rs.warnings.push({ x: col * TILE_SIZE, y: game.cameraY + ROCKET_Y_OFFSET, timer: ROCKET_WARNING_TIME }); });
             io.to(game.id).emit('sfx', 'warning');
         } else if (rs.wavesLeft === 0 && rs.warnings.length === 0 && rs.rockets.length === 0) {
-            rs.active = false;
-            rs.nextCycle = fc + 1800 + Math.floor(Math.random() * 5400); 
+            rs.active = false; rs.nextCycle = fc + 1800 + Math.floor(Math.random() * 5400); 
         }
     }
 
     const gColors = ['red','pink','cyan','orange'];
-
     for (let i = rs.warnings.length - 1; i >= 0; i--) {
-        let w = rs.warnings[i];
-        w.y = game.cameraY + ROCKET_Y_OFFSET; 
-        w.timer--;
-        if (w.timer <= 0) {
-            rs.rockets.push({
-                x: w.x,
-                y: game.cameraY + 950, 
-                vx: 0,
-                vy: -PLAYER_SPEED_MAX * 2, 
-                color: gColors[Math.floor(Math.random()*4)]
-            });
-            rs.warnings.splice(i, 1);
-            if (i === 0) io.to(game.id).emit('sfx', 'rocket');
-        }
+        let w = rs.warnings[i]; w.y = game.cameraY + ROCKET_Y_OFFSET; w.timer--;
+        if (w.timer <= 0) { rs.rockets.push({ x: w.x, y: game.cameraY + 950, vx: 0, vy: -PLAYER_SPEED_MAX * 2, color: gColors[Math.floor(Math.random()*4)] }); rs.warnings.splice(i, 1); if (i === 0) io.to(game.id).emit('sfx', 'rocket'); }
     }
-
     for (let i = rs.rockets.length - 1; i >= 0; i--) {
-        let r = rs.rockets[i];
-        r.y += r.vy;
+        let r = rs.rockets[i]; r.y += r.vy;
         if (r.y < game.cameraY - 200) { rs.rockets.splice(i, 1); continue; }
-        for (let pid in game.players) {
-            const p = game.players[pid];
-            if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0) {
-                if (Math.abs(p.x - r.x) < 20 && Math.abs(p.y - r.y) < 20) { loseLife(game, p); }
-            }
+        for (let pid in game.players) { const p = game.players[pid]; if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0 && Math.abs(p.x - r.x) < 20 && Math.abs(p.y - r.y) < 20) loseLife(game, p); }
+    }
+}
+
+// НОВАЯ ЛОГИКА ЦУНАМИ
+function handleSurgeLogic(game) {
+    const s = game.surge;
+    const fc = game.frameCounter;
+
+    if (s.state === 'IDLE') {
+        if (fc >= s.nextTime) {
+            s.state = 'RISING';
+            io.to(game.id).emit('sfx', 'warning'); // Звук предупреждения перед волной
+        }
+    } else if (s.state === 'RISING') {
+        // Поднимаем плавно
+        const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; // 0.4 px/frame
+        s.currentHeight += riseSpeed;
+        if (s.currentHeight >= SURGE_MAX_HEIGHT) {
+            s.currentHeight = SURGE_MAX_HEIGHT;
+            s.state = 'RETURNING';
+        }
+    } else if (s.state === 'RETURNING') {
+        // Возвращаем быстро
+        const returnSpeed = SURGE_MAX_HEIGHT / SURGE_RETURN_TIME; // ~1.3 px/frame
+        s.currentHeight -= returnSpeed;
+        if (s.currentHeight <= 0) {
+            s.currentHeight = 0;
+            s.state = 'IDLE';
+            // Следующая волна через 1-5 минут
+            s.nextTime = fc + SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL));
         }
     }
 }
@@ -461,6 +510,7 @@ function updateGamePhysics(game) {
     game.cameraY -= game.gameSpeed * speedMult;
 
     handleRocketLogic(game);
+    handleSurgeLogic(game); // Обработка волны
 
     let ratio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
@@ -472,6 +522,9 @@ function updateGamePhysics(game) {
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
     if(game.frightenedTimer > 0) game.frightenedTimer--;
+
+    // Линия смерти с учетом волны
+    const deathY = (game.cameraY + 800) - game.surge.currentHeight;
 
     const pIds = Object.keys(game.players);
     for (let id of pIds) {
@@ -518,7 +571,9 @@ function updateGamePhysics(game) {
             else if(tile === TILE.EVIL) { p.pvpTimer = PVP_MODE_DURATION; p.stats.evil++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         }
-        if(p.y > game.cameraY + 800) loseLife(game, p);
+        
+        // ПРОВЕРКА СМЕРТИ (Динамическая зона)
+        if(p.y > deathY) loseLife(game, p);
     }
 
     for (let i = 0; i < pIds.length; i++) {

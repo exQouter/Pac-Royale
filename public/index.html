@@ -202,21 +202,12 @@
             for(let i=0; i<4; i++) { const s=document.getElementById(`slot-${i}`); s.className='lobby-slot'; s.innerHTML=`<div class="slot-label">PLAYER ${i+1}</div><div class="waiting-anim">WAITING...</div>`; } 
             players.forEach(p => { const s=document.getElementById(`slot-${p.colorIdx}`); if(s) { s.classList.add('filled'); s.innerHTML=`<div class="slot-label" style="color:${p.color}">PLAYER ${p.colorIdx+1}</div><div class="slot-pacman" style="--slot-color:${p.color};"></div><div class="slot-name">${p.name}</div>`; } }); 
             
-            // Обновление доступности цветов
             const usedColors = players.map(p => p.color);
             document.querySelectorAll('.color-swatch').forEach((el, idx) => {
                 const myColor = PLAYER_COLORS[idx];
-                // Если цвет занят И это не мой текущий цвет (если я уже выбрал) - блокируем
-                // Но для простоты: просто блокируем все занятые цвета, кроме того, что выбрал "Я" (через сокет не узнать "мой" цвет напрямую здесь без id, но мы знаем игроков)
                 const takenByOthers = players.some(p => p.color === myColor && p.id !== socket.id);
-                
-                if (takenByOthers) {
-                    el.classList.add('disabled');
-                    el.onclick = null;
-                } else {
-                    el.classList.remove('disabled');
-                    el.onclick = () => selectColor(idx);
-                }
+                if (takenByOthers) { el.classList.add('disabled'); el.onclick = null; } 
+                else { el.classList.remove('disabled'); el.onclick = () => selectColor(idx); }
             });
         }
         
@@ -286,7 +277,6 @@
             
             document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherryIcon}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
             
-            // ЛОГИКА КНОПКИ PLAY AGAIN
             const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
             const btnText = data.allDead ? 'PLAY AGAIN 🏠' : 'WAITING...';
             
@@ -434,10 +424,35 @@
             
             popups = popups.filter(p => p.life > 0);
             popups.forEach(p => { p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - visualCamY); });
-            const ty = canvas.height - 40; if(s.cd > 0) deathZoneY = canvas.height + 100; else deathZoneY += (ty - deathZoneY) * 0.02; 
-            const tm = now/200; const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
-            for(let i=-1; i<22; i++) { const wy = Math.sin(tm + i*0.5)*5; drawGhost(ctx, i*30, deathZoneY + wy, gc[i%4], 0, -1, 0); }
-            for(let i=-1; i<22; i++) { const wy = Math.sin(tm + i*0.5 + 2)*5; drawGhost(ctx, i*30-15, deathZoneY + 15 + wy, gc[(i+2)%4], 0, -1, 0); }
+            
+            // RENDER SURGE (Цунами)
+            const surgeHeight = s.surgeHeight || 0;
+            const ty = canvas.height - 40; 
+            
+            if(s.cd > 0) deathZoneY = canvas.height + 100; 
+            else deathZoneY += (ty - deathZoneY) * 0.02; 
+            
+            const visualDeathY = deathZoneY - surgeHeight; // Визуальная граница смерти
+            
+            const tm = now/200; 
+            const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
+            
+            // РИСУЕМ МАССИВ ПРИВИДЕНИЙ (ЗАПОЛНЕНИЕ)
+            // Начинаем с визуальной границы и идем вниз до конца экрана + запас
+            for (let gy = visualDeathY; gy < canvas.height + 60; gy += 30) {
+                const rowIndex = Math.floor(gy / 30);
+                for(let i=-1; i<22; i++) { 
+                    // Хаотичное смещение
+                    const chaosX = Math.sin(tm + i + rowIndex) * 3;
+                    const chaosY = Math.cos(tm + i * 0.5 + rowIndex) * 3;
+                    
+                    // Цвет (чередуется)
+                    const color = gc[(i + rowIndex) % 4];
+                    
+                    drawGhost(ctx, i*30 + chaosX, gy + chaosY, color, 0, -1, 0); 
+                }
+            }
+
             ctx.restore(); 
         }
 
