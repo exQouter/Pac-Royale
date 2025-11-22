@@ -16,8 +16,8 @@ const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 
-const CAM_SPEED_START = 0.6;
-const CAM_SPEED_MAX   = 2.0;
+const CAM_SPEED_START = 0.8;
+const CAM_SPEED_MAX   = 3.0;
 const CAM_ACCEL       = 0.000122; 
 const PLAYER_SPEED_START = 1.6; 
 const PLAYER_SPEED_MAX   = 4.0;
@@ -30,13 +30,12 @@ const POWER_MODE_DURATION = 240;
 const PVP_MODE_DURATION = 300;
 const DEATH_ANIMATION_FRAMES = 60;
 
-const SPEED_BOOST_DURATION = 420; // 7 секунд
+const SPEED_BOOST_DURATION = 420; 
 const SCORE_MILESTONE = 10000;    
 
-// --- ROCKET SETTINGS ---
-const ROCKET_START_TIME = 10800; // 3 минуты
-const ROCKET_WAVE_INTERVAL = 180; // 3 сек между волнами
-const ROCKET_WARNING_TIME = 120; // 2 сек предупреждение
+const ROCKET_START_TIME = 10800; 
+const ROCKET_WAVE_INTERVAL = 180; 
+const ROCKET_WARNING_TIME = 120; 
 const ROCKET_Y_OFFSET = 720; 
 
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
@@ -224,7 +223,11 @@ io.on('connection', (socket) => {
     });
 });
 
+// --- ГЛАВНЫЙ ЦИКЛ СЕРВЕРА ---
+let tickCount = 0;
+
 setInterval(() => {
+    tickCount++;
     for (const roomId in lobbies) {
         const game = lobbies[roomId];
         if (!game.isRunning) continue;
@@ -233,20 +236,57 @@ setInterval(() => {
         
         game.changes = { removedDots: [], newRows: {} };
         
-        const s = { 
-            t: Date.now(), camY: game.cameraY, players: game.players, ghosts: game.ghosts, ft: game.frightenedTimer, cd: game.countdown, st: game.startTime, changes: game.changes, sbt: game.speedBoostTimer,
-            rockets: game.rocketState.rockets, warnings: game.rocketState.warnings
-        };
-
         if (game.countdown > 0) {
-            io.to(roomId).emit('state', s);
+            // Шлем стартовый отсчет (ОБЯЗАТЕЛЬНО С camY!)
+            if (tickCount % 3 === 0) {
+                io.to(roomId).emit('state', { 
+                    t: Date.now(), 
+                    cd: game.countdown, 
+                    players: game.players,
+                    camY: game.cameraY, // ИСПРАВЛЕНИЕ: Добавлено поле camY
+                    rockets: [], warnings: [], ghosts: [] // Пустые массивы для безопасности
+                });
+            }
             continue;
         }
         
+        // Физику считаем каждый тик (60 раз/сек)
         updateGamePhysics(game);
-        s.rockets = game.rocketState.rockets;
-        s.warnings = game.rocketState.warnings;
-        io.to(roomId).emit('state', s);
+
+        // Отправляем данные только каждый 3-й тик (20 раз/сек)
+        if (tickCount % 3 === 0) {
+            const fastPlayers = {};
+            for(let pid in game.players) {
+                const p = game.players[pid];
+                fastPlayers[pid] = {
+                    id: p.id, name: p.name, colorIdx: p.colorIdx, color: p.color,
+                    score: p.score, lives: p.lives, alive: p.alive,
+                    x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
+                    vx: p.vx, vy: p.vy,
+                    deathTimer: p.deathTimer, invulnTimer: p.invulnTimer, pvpTimer: p.pvpTimer
+                };
+            }
+
+            const fastGhosts = game.ghosts.map(g => ({
+                x: Math.round(g.x), y: Math.round(g.y),
+                color: g.color, vx: g.vx, vy: g.vy, dead: g.dead
+            }));
+
+            const s = { 
+                t: Date.now(), 
+                camY: Math.round(game.cameraY * 10) / 10, 
+                players: fastPlayers, 
+                ghosts: fastGhosts, 
+                ft: game.frightenedTimer, 
+                st: game.startTime, 
+                changes: game.changes, 
+                sbt: game.speedBoostTimer,
+                rockets: game.rocketState.rockets, 
+                warnings: game.rocketState.warnings
+            };
+
+            io.to(roomId).emit('state', s);
+        }
     }
 }, 1000 / 60);
 

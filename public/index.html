@@ -17,7 +17,6 @@
             margin: 0 15px; 
         }
         
-        /* --- ОБНОВЛЕННЫЙ СТИЛЬ ПАНЕЛЕЙ ИГРОКОВ --- */
         .side-panel { 
             width: 120px; 
             height: 160px; 
@@ -35,20 +34,16 @@
             opacity: 0.3; 
             transition: opacity 0.3s, transform 0.2s, box-shadow 0.2s; 
             
-            /* Тень в цвет игрока, но темнее (смешиваем с черным 50%) */
+            /* Тень в цвет игрока, но темнее */
             box-shadow: 6px 6px 0px color-mix(in srgb, var(--p-color), black 50%);
-            
-            /* Небольшой внутренний отступ для красоты */
             position: relative;
         }
         
         .side-panel.active { 
             opacity: 1; 
-            /* При активности панель немного "всплывает" */
             transform: translate(-2px, -2px);
             box-shadow: 8px 8px 0px color-mix(in srgb, var(--p-color), black 50%);
         }
-        /* ----------------------------------------- */
         
         .pac-avatar { 
             width: 40px; 
@@ -290,46 +285,23 @@
                 const o = this.ctx.createOscillator();
                 o.type = 'triangle'; 
                 o.frequency.setValueAtTime(600, t); 
-
                 const g = this.ctx.createGain();
                 g.gain.setValueAtTime(0, t);
-
-                g.gain.linearRampToValueAtTime(0.15, t + 0.05);
-                g.gain.setValueAtTime(0.15, t + 0.3);
-                g.gain.linearRampToValueAtTime(0, t + 0.35);
-
-                g.gain.linearRampToValueAtTime(0.15, t + 0.7);
-                g.gain.setValueAtTime(0.15, t + 0.95);
-                g.gain.linearRampToValueAtTime(0, t + 1.0);
-
-                g.gain.linearRampToValueAtTime(0.15, t + 1.35);
-                g.gain.setValueAtTime(0.15, t + 1.6);
-                g.gain.linearRampToValueAtTime(0, t + 1.65);
-
-                o.connect(g);
-                g.connect(this.masterGain);
-                o.start(t);
-                o.stop(t + 1.7);
+                g.gain.linearRampToValueAtTime(0.15, t + 0.05); g.gain.setValueAtTime(0.15, t + 0.3); g.gain.linearRampToValueAtTime(0, t + 0.35);
+                g.gain.linearRampToValueAtTime(0.15, t + 0.7); g.gain.setValueAtTime(0.15, t + 0.95); g.gain.linearRampToValueAtTime(0, t + 1.0);
+                g.gain.linearRampToValueAtTime(0.15, t + 1.35); g.gain.setValueAtTime(0.15, t + 1.6); g.gain.linearRampToValueAtTime(0, t + 1.65);
+                o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t + 1.7);
             }
 
             playRocket() {
                 const t = this.ctx.currentTime;
                 const noise = this.ctx.createBufferSource();
                 noise.buffer = this.createNoiseBuffer();
-                
                 const filter = this.ctx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.setValueAtTime(800, t);
-                filter.frequency.exponentialRampToValueAtTime(100, t + 1.0);
-
+                filter.type = 'lowpass'; filter.frequency.setValueAtTime(800, t); filter.frequency.exponentialRampToValueAtTime(100, t + 1.0);
                 const gain = this.ctx.createGain();
-                gain.gain.setValueAtTime(0.4, t);
-                gain.gain.exponentialRampToValueAtTime(0.01, t + 1.0);
-
-                noise.connect(filter);
-                filter.connect(gain);
-                gain.connect(this.masterGain);
-                noise.start(t);
+                gain.gain.setValueAtTime(0.4, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 1.0);
+                noise.connect(filter); filter.connect(gain); gain.connect(this.masterGain); noise.start(t);
             }
         }
         const synth = new PacmanSynth();
@@ -355,7 +327,6 @@
                 const slot = document.getElementById(`slot-${p.colorIdx}`); 
                 if(slot) { 
                     slot.classList.add('filled'); 
-                    // Updated logic to pass color variable
                     slot.innerHTML = `<div class="slot-label" style="color:${p.color}">PLAYER ${p.colorIdx+1}</div><div class="slot-pacman" style="--slot-color:${p.color};"></div><div class="slot-name">${p.name}</div>`; 
                 } 
             }); 
@@ -431,36 +402,18 @@
         socket.on('gameOver', data => { 
             document.getElementById('game-over').classList.add('visible'); 
             document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
-            
-            isJoined = false; 
-            isSpectating = true; 
-            hideSpectatorBtn(); 
-            
+            isJoined = false; isSpectating = true; hideSpectatorBtn(); 
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#9900ff"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
             const cherryIcon = '<span style="font-size:20px">🍒</span>';
-
             const statsDiv = document.getElementById('match-stats-container');
             const s = data.stats;
-            statsDiv.innerHTML = `
-                <div class="stat-item">${cherryIcon}x${s.cherries}</div>
-                <div class="stat-item">${ghostSVG}x${s.ghosts}</div>
-                <div class="stat-item">${pacSVG}x${s.players}</div>
-                <div class="stat-item">${evilSVG}x${s.evil}</div>
-            `;
-
+            statsDiv.innerHTML = `<div class="stat-item">${cherryIcon}x${s.cherries}</div><div class="stat-item">${ghostSVG}x${s.ghosts}</div><div class="stat-item">${pacSVG}x${s.players}</div><div class="stat-item">${evilSVG}x${s.evil}</div>`;
             const btnDiv = document.getElementById('go-buttons');
             const anyAlive = data.leaderboard.some(p => p.alive);
-            btnDiv.innerHTML = `
-                <button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!anyAlive ? 'disabled' : ''}>SPECTATE 👁️</button>
-                <button class="btn-play-again" onclick="location.reload()">PLAY AGAIN 🏠</button>
-            `;
-
-            const playersObj = {};
-            data.leaderboard.forEach(p => playersObj[p.name] = p); 
-            updateLeaderboardHTML(playersObj);
-
+            btnDiv.innerHTML = `<button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!anyAlive ? 'disabled' : ''}>SPECTATE 👁️</button><button class="btn-play-again" onclick="location.reload()">PLAY AGAIN 🏠</button>`;
+            const playersObj = {}; data.leaderboard.forEach(p => playersObj[p.name] = p); updateLeaderboardHTML(playersObj);
             synth.stopSiren(); 
         });
 
@@ -483,59 +436,56 @@
                 const camGridY = Math.floor(s.camY / TILE_SIZE);
                 for(let k in localRows) { if(parseInt(k) > camGridY + 50) delete localRows[k]; }
             }
-            
-            if(isSpectating && s.players) {
-                updateLeaderboardHTML(s.players);
-            }
-
+            if(isSpectating && s.players) updateLeaderboardHTML(s.players);
             prevState = currState; currState = s;
             if(!prevState) prevState = currState;
         });
 
-        function lerp(start, end, t) { return start * (1 - t) + end * t; }
+        // ДЛЯ СГЛАЖИВАНИЯ
+        let visualPlayers = {}; 
+        let visualGhosts = [];
+        let visualCamY = 0;
+
+        function smoothLerp(current, target, factor) { return current + (target - current) * factor; }
 
         function renderLoop() {
             if(!isJoined && !isSpectating) return;
             requestAnimationFrame(renderLoop);
 
             if(!currState) return;
-
             const now = Date.now();
-            let t = (now - currState.t) / (1000 / 60); 
-            if (t > 1.5) t = 1.5; if (t < 0) t = 0;
-            if (!prevState) t = 0;
-
             const s = currState;
-            const pS = prevState || currState;
-            const camY = lerp(pS.camY, s.camY, 0.5);
+
+            // 1. Плавная камера
+            if (visualCamY === 0 && s.camY !== undefined) visualCamY = s.camY;
+            if (s.camY !== undefined) visualCamY = smoothLerp(visualCamY, s.camY, 0.1); 
 
             let shakeX = 0, shakeY = 0;
-            if (s.sbt > 0) {
-                shakeX = (Math.random() - 0.5) * 4;
-                shakeY = (Math.random() - 0.5) * 4;
-            }
+            if (s.sbt > 0) { shakeX = (Math.random() - 0.5) * 4; shakeY = (Math.random() - 0.5) * 4; }
 
             const cdEl = document.getElementById('countdown-display');
             if (s.cd > 0) { cdEl.style.display = 'block'; cdEl.innerText = Math.ceil(s.cd); } 
             else if (s.cd > -1) { cdEl.style.display = 'block'; cdEl.innerText = "GO!"; } 
             else { cdEl.style.display = 'none'; }
             
-            if (now - (s.st || 0) > 4000 || s.cd < 0) {
-                if(s.ft > 0) synth.checkSirenUpdate('power'); else synth.checkSirenUpdate('normal');
-            }
+            if (now - (s.st || 0) > 4000 || s.cd < 0) { if(s.ft > 0) synth.checkSirenUpdate('power'); else synth.checkSirenUpdate('normal'); }
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const startRow = Math.floor(camY / TILE_SIZE) - 2;
+            
+            // Рисуем карту относительно visualCamY
+            const startRow = Math.floor(visualCamY / TILE_SIZE) - 2;
             const endRow = startRow + (canvas.height / TILE_SIZE) + 4;
 
             ctx.save();
             ctx.translate(shakeX, shakeY); 
 
+            // --- ОТРИСОВКА КАРТЫ ---
             for (let y = startRow; y <= endRow; y++) {
                 if (!localRows[y]) continue;
-                const sy = (y * TILE_SIZE - camY) | 0;
+                const sy = (y * TILE_SIZE - visualCamY) | 0; 
                 for (let x = 0; x < 20; x++) {
                     const t = localRows[y][x]; const sx = x * TILE_SIZE;
+                    if (t === 0) continue; 
                     if (t === 1) {
                         let wallColor = '#1919A6';
                         if (s.sbt > 0 && Math.floor(now / 150) % 2 === 0) wallColor = '#FFFF00';
@@ -554,30 +504,31 @@
                 }
             }
 
-            // --- RENDER ROCKETS & WARNINGS ---
-            if (s.warnings) {
-                s.warnings.forEach(w => drawWarning(ctx, w.x, w.y - camY, w.timer));
+            if (s.warnings) s.warnings.forEach(w => drawWarning(ctx, w.x, w.y - visualCamY, w.timer));
+            if (s.rockets) s.rockets.forEach(r => drawGhost(ctx, r.x, r.y - visualCamY, r.color, 0, -1, 0)); 
+            
+            // --- ПРИЗРАКИ (Плавное сглаживание) ---
+            if(s.ghosts) {
+                if(visualGhosts.length !== s.ghosts.length) visualGhosts = s.ghosts.map(g => ({x: g.x, y: g.y, color: g.color})); 
+                
+                s.ghosts.forEach((g, i) => {
+                    if(!visualGhosts[i]) visualGhosts[i] = {x: g.x, y: g.y};
+                    visualGhosts[i].x = smoothLerp(visualGhosts[i].x, g.x, 0.1);
+                    visualGhosts[i].y = smoothLerp(visualGhosts[i].y, g.y, 0.1);
+                    drawGhost(ctx, visualGhosts[i].x, visualGhosts[i].y - visualCamY, g.color, g.vx, g.vy, s.ft);
+                });
             }
-            if (s.rockets) {
-                s.rockets.forEach(r => drawGhost(ctx, r.x, r.y - camY, r.color, 0, -1, 0)); 
-            }
-            // ---------------------------------
 
-            s.ghosts.forEach((g, i) => {
-                const prevG = (pS.ghosts && pS.ghosts[i]) ? pS.ghosts[i] : g;
-                const ix = lerp(prevG.x, g.x, 0.3); 
-                const iy = lerp(prevG.y, g.y, 0.3);
-                drawGhost(ctx, ix, iy - camY, g.color, g.vx, g.vy, s.ft);
-            });
-
+            // --- ИГРОКИ (Плавное сглаживание) ---
             for(let i=0; i<4; i++) document.getElementById(`p${i}`).classList.remove('active');
+            
             for(let id in s.players) {
                 const p = s.players[id];
-                const prevP = (pS.players && pS.players[id]) ? pS.players[id] : p;
+                if(!visualPlayers[id]) visualPlayers[id] = {x: p.x, y: p.y};
 
                 const panel = document.getElementById(`p${p.colorIdx}`);
                 if(panel) {
-                    panel.classList.add('active'); panel.style.opacity = 1;
+                    panel.classList.add('active'); 
                     document.getElementById(`n${p.colorIdx}`).innerText = p.name;
                     document.getElementById(`s${p.colorIdx}`).innerText = p.score;
                     document.getElementById(`l${p.colorIdx}`).innerText = p.alive ? "❤️".repeat(p.lives) : "DEAD";
@@ -585,9 +536,16 @@
                 if(p.id === socket.id && p.score > prevScore) { synth.playWaka(); prevScore = p.score; }
                 if(!p.alive) continue;
                 
-                const ix = lerp(prevP.x, p.x, 0.5);
-                const iy = lerp(prevP.y, p.y, 0.5);
-                const sy = iy - camY;
+                const dist = Math.abs(visualPlayers[id].y - p.y);
+                if (dist > 100) { visualPlayers[id].x = p.x; visualPlayers[id].y = p.y; } 
+                else {
+                    visualPlayers[id].x = smoothLerp(visualPlayers[id].x, p.x, 0.2); 
+                    visualPlayers[id].y = smoothLerp(visualPlayers[id].y, p.y, 0.2);
+                }
+
+                const ix = visualPlayers[id].x;
+                const iy = visualPlayers[id].y;
+                const sy = iy - visualCamY;
 
                 if (p.deathTimer > 0) {
                     const progress = 1 - (p.deathTimer / 60);
@@ -596,17 +554,22 @@
                     ctx.fillStyle = p.color; ctx.beginPath(); ctx.moveTo(ix + 15, sy + 15); ctx.arc(ix + 15, sy + 15, 12, startAngle, endAngle); ctx.fill();
                     continue;
                 }
+                
                 if(p.invulnTimer > 0 && now%200 < 100) continue;
+                
                 ctx.fillStyle = (p.pvpTimer > 0) ? '#9900FF' : p.color; ctx.beginPath();
-                if(p.vx > 0) lastAngles[id] = 0; else if(p.vy > 0) lastAngles[id] = Math.PI/2; else if(p.vx < 0) lastAngles[id] = Math.PI; else if(p.vy < 0) lastAngles[id] = -Math.PI/2;
+                if(p.vx > 0) lastAngles[id] = 0; else if(p.vy > 0) lastAngles[id] = Math.PI/2; 
+                else if(p.vx < 0) lastAngles[id] = Math.PI; else if(p.vy < 0) lastAngles[id] = -Math.PI/2;
+                
                 const angle = lastAngles[id] !== undefined ? lastAngles[id] : 0;
                 const mouth = 0.2 + (Math.sin(now/50)+1)/10;
-                ctx.arc(ix+15, sy+15, 12, angle + mouth*Math.PI, angle + (2-mouth)*Math.PI); ctx.lineTo(ix+15, sy+15); ctx.fill();
+                ctx.arc(ix+15, sy+15, 12, angle + mouth*Math.PI, angle + (2-mouth)*Math.PI); 
+                ctx.lineTo(ix+15, sy+15); ctx.fill();
                 ctx.fillStyle = "white"; ctx.font = "8px 'Press Start 2P'"; ctx.textAlign="center"; ctx.fillText(p.name, ix+15, sy-5);
             }
             
             popups = popups.filter(p => p.life > 0);
-            popups.forEach(p => { p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - camY); });
+            popups.forEach(p => { p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - visualCamY); });
             
             const targetY = canvas.height - 40;
             if(s.cd > 0) { deathZoneY = canvas.height + 100; } else { deathZoneY += (targetY - deathZoneY) * 0.02; }
@@ -615,22 +578,15 @@
             for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5)*5; drawGhost(ctx, i*30, deathZoneY + waveY, gCols[i%4], 0, -1, 0); }
             for(let i=-1; i<22; i++) { const waveY = Math.sin(time + i*0.5 + 2)*5; drawGhost(ctx, i*30-15, deathZoneY + 15 + waveY, gCols[(i+2)%4], 0, -1, 0); }
 
-            ctx.restore(); // RESTORE AFTER SHAKE
+            ctx.restore(); 
         }
 
         function drawWarning(ctx, x, y, timer) {
             if (Math.floor(Date.now() / 150) % 2 === 0) return;
             const cx = x + 15;
             const cy = y + 15;
-            ctx.fillStyle = '#FF0000';
-            ctx.beginPath();
-            ctx.moveTo(cx, cy - 12);
-            ctx.lineTo(cx + 12, cy + 10);
-            ctx.lineTo(cx - 12, cy + 10);
-            ctx.fill();
-            ctx.fillStyle = '#FFFF00';
-            ctx.fillRect(cx - 2, cy - 5, 4, 9);
-            ctx.fillRect(cx - 2, cy + 6, 4, 2);
+            ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.moveTo(cx, cy - 12); ctx.lineTo(cx + 12, cy + 10); ctx.lineTo(cx - 12, cy + 10); ctx.fill();
+            ctx.fillStyle = '#FFFF00'; ctx.fillRect(cx - 2, cy - 5, 4, 9); ctx.fillRect(cx - 2, cy + 6, 4, 2);
         }
 
         function drawGhost(ctx, x, y, color, vx, vy, frightenedTimer) {
