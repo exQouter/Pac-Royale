@@ -16,8 +16,8 @@ const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 const COLORS = ['#FFFF00', '#00FF00', '#00FFFF', '#FF00FF'];
 
-const CAM_SPEED_START = 0.8;
-const CAM_SPEED_MAX   = 3.0;
+const CAM_SPEED_START = 0.6;
+const CAM_SPEED_MAX   = 2.0;
 const CAM_ACCEL       = 0.000122; 
 const PLAYER_SPEED_START = 1.6; 
 const PLAYER_SPEED_MAX   = 4.0;
