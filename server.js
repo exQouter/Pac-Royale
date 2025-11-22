@@ -15,7 +15,7 @@ app.use(express.static('public'));
 const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 
-// 4 Цвета (Lime и White убраны, чтобы не сливаться)
+// 4 Цвета
 const PLAYER_COLORS = [
     '#FFFF00', // Yellow
     '#00FF00', // Green
@@ -133,6 +133,7 @@ function initMap(game) {
     game.changes = { removedDots: [], newRows: {} };
 }
 
+// ИСПРАВЛЕННАЯ ФУНКЦИЯ СБРОСА
 function resetGame(game) {
     game.isRunning = false;
     game.ghosts = [];
@@ -146,7 +147,18 @@ function resetGame(game) {
     
     initMap(game);
 
+    // Проходим по всем игрокам в памяти комнаты
     for (let pid in game.players) {
+        // ВАЖНО: Проверяем, подключен ли этот сокет сейчас к серверу
+        const socketConnected = io.sockets.sockets.get(pid);
+
+        if (!socketConnected) {
+            // Если сокета нет (игрок закрыл вкладку), удаляем его из игры
+            delete game.players[pid];
+            continue;
+        }
+
+        // Если игрок на месте, сбрасываем его статы
         const p = game.players[pid];
         p.x = (4 + p.colorIdx * 4) * TILE_SIZE;
         p.y = 22 * TILE_SIZE;
@@ -208,7 +220,6 @@ io.on('connection', (socket) => {
         const game = lobbies[roomId];
         if (game.isRunning) { socket.emit('errorMsg', 'Game already started'); return; }
         
-        // Находим свободный слот цвета
         const usedIdx = Object.values(game.players).map(p => p.colorIdx);
         let myIdx = -1;
         for(let i=0; i<4; i++) if(!usedIdx.includes(i)) { myIdx = i; break; }
@@ -236,7 +247,6 @@ io.on('connection', (socket) => {
             const game = lobbies[currentRoom];
             const p = game.players[socket.id];
             
-            // ПРОВЕРКА: Не занят ли цвет другим игроком?
             const isTaken = Object.values(game.players).some(player => player.id !== socket.id && player.color === PLAYER_COLORS[colorIndex]);
             
             if (p && PLAYER_COLORS[colorIndex] && !isTaken) {
@@ -263,9 +273,9 @@ io.on('connection', (socket) => {
     socket.on('returnToLobby', () => {
         if (currentRoom && lobbies[currentRoom]) {
             const game = lobbies[currentRoom];
-            // Сбрасываем игру только если она еще идет или закончена
-            // На всякий случай, можно вызывать resetGame при возврате
+            // Сначала чистим отключившихся
             resetGame(game);
+            // Потом шлем обновление
             io.to(currentRoom).emit('lobbyUpdate', { 
                 players: Object.values(game.players), 
                 hostId: game.hostId, 
@@ -569,19 +579,16 @@ function finalizeDeath(game, p) {
         updateGlobalLeaderboard(p.name, p.score);
         const matchResults = Object.values(game.players).sort((a,b) => b.score - a.score);
         
-        // Проверяем, все ли мертвы
         const anyAlive = Object.values(game.players).some(pl => pl.alive);
         const allDead = !anyAlive;
 
-        // Отправляем GameOver игроку
         io.to(p.id).emit('gameOver', {
             score: p.score,
             stats: p.stats,
             leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})),
-            allDead: allDead // Флаг для кнопки
+            allDead: allDead
         });
 
-        // Если все мертвы, отправляем сигнал окончания матча всем
         if (allDead) {
             io.to(game.id).emit('matchEnded');
         }
