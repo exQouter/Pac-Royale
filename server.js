@@ -46,11 +46,11 @@ const ROCKET_WARNING_TIME = 120;
 const ROCKET_Y_OFFSET = 720; 
 
 // SURGE (Цунами) SETTINGS
-const SURGE_MIN_INTERVAL = 3600;  // 1 минута (60 fps * 60)
-const SURGE_MAX_INTERVAL = 18000; // 5 минут (60 fps * 300)
-const SURGE_RISE_TIME = 600;      // 10 секунд на подъем
-const SURGE_RETURN_TIME = 180;    // 3 секунды на возврат
-const SURGE_MAX_HEIGHT = 240;     // 30% от 800px
+const SURGE_MIN_INTERVAL = 3600;  // 1 минута
+const SURGE_MAX_INTERVAL = 18000; // 5 минут
+const SURGE_RISE_TIME = 600;      // 10 секунд
+const SURGE_RETURN_TIME = 180;    // 3 секунды
+const SURGE_MAX_HEIGHT = 240;     // 30% высоты
 
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
 
@@ -98,8 +98,7 @@ function makeId(length) {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- НОВЫЕ ПАТТЕРНЫ (Плотные лабиринты, узкие проходы) ---
-// --- ПАТТЕРНЫ ---
+// --- ПАТТЕРНЫ (ВОЗВРАЩЕНЫ СТАРЫЕ) ---
 const PATTERNS = [
     [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,0,1,1], [1,0,0,0,0,0,1,0,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,0,1,1,1,1]],
     [[1,0,0,0,1,0,0,0,0,0], [1,0,1,0,1,0,1,1,1,1], [1,0,1,0,1,0,0,0,0,0], [1,0,1,0,0,0,1,1,1,0], [1,0,1,1,1,0,1,3,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,1,1,0,1,1], [1,0,0,0,0,0,0,0,0,1], [1,1,1,0,1,1,1,1,0,1]],
@@ -125,11 +124,11 @@ function createGame(roomId) {
             warnings: [],
             rockets: []
         },
-        // НОВОЕ: Состояние Цунами
+        // Состояние Цунами
         surge: {
             state: 'IDLE', // IDLE, RISING, RETURNING
             currentHeight: 0,
-            nextTime: 3600 + Math.floor(Math.random() * 7200) // Первый раз через 1-3 минуты
+            nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL))
         }
     };
     
@@ -159,7 +158,7 @@ function resetGame(game) {
     game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
     
     // Сброс Цунами
-    game.surge = { state: 'IDLE', currentHeight: 0, nextTime: 3600 + Math.floor(Math.random() * 7200) };
+    game.surge = { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) };
 
     initMap(game);
 
@@ -196,6 +195,9 @@ function generateRow(game, yIndex) {
 
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
+        
+        // --- SAFETY LANE MECHANIC ---
+        // Оставляем эту логику, чтобы даже в старых паттернах не было полных тупиков
         if (i === 2 && Math.random() > 0.15) val = 0;
         
         const right = 19 - i;
@@ -364,7 +366,7 @@ setInterval(() => {
                 ft: game.frightenedTimer, st: game.startTime, 
                 changes: game.changes, sbt: game.speedBoostTimer,
                 rockets: game.rocketState.rockets, warnings: game.rocketState.warnings,
-                surgeHeight: Math.round(game.surge.currentHeight) // Отправляем высоту волны
+                surgeHeight: Math.round(game.surge.currentHeight)
             };
 
             io.to(roomId).emit('state', s);
@@ -405,7 +407,6 @@ function handleRocketLogic(game) {
     }
 }
 
-// НОВАЯ ЛОГИКА ЦУНАМИ
 function handleSurgeLogic(game) {
     const s = game.surge;
     const fc = game.frameCounter;
@@ -413,24 +414,21 @@ function handleSurgeLogic(game) {
     if (s.state === 'IDLE') {
         if (fc >= s.nextTime) {
             s.state = 'RISING';
-            io.to(game.id).emit('sfx', 'warning'); // Звук предупреждения перед волной
+            io.to(game.id).emit('sfx', 'warning'); 
         }
     } else if (s.state === 'RISING') {
-        // Поднимаем плавно
-        const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; // 0.4 px/frame
+        const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; 
         s.currentHeight += riseSpeed;
         if (s.currentHeight >= SURGE_MAX_HEIGHT) {
             s.currentHeight = SURGE_MAX_HEIGHT;
             s.state = 'RETURNING';
         }
     } else if (s.state === 'RETURNING') {
-        // Возвращаем быстро
-        const returnSpeed = SURGE_MAX_HEIGHT / SURGE_RETURN_TIME; // ~1.3 px/frame
+        const returnSpeed = SURGE_MAX_HEIGHT / SURGE_RETURN_TIME; 
         s.currentHeight -= returnSpeed;
         if (s.currentHeight <= 0) {
             s.currentHeight = 0;
             s.state = 'IDLE';
-            // Следующая волна через 1-5 минут
             s.nextTime = fc + SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL));
         }
     }
@@ -449,7 +447,7 @@ function updateGamePhysics(game) {
     game.cameraY -= game.gameSpeed * speedMult;
 
     handleRocketLogic(game);
-    handleSurgeLogic(game); // Обработка волны
+    handleSurgeLogic(game); 
 
     let ratio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
@@ -462,7 +460,6 @@ function updateGamePhysics(game) {
     if(!game.rows[topRow]) generateRow(game, topRow);
     if(game.frightenedTimer > 0) game.frightenedTimer--;
 
-    // Линия смерти с учетом волны
     const deathY = (game.cameraY + 800) - game.surge.currentHeight;
 
     const pIds = Object.keys(game.players);
@@ -511,7 +508,6 @@ function updateGamePhysics(game) {
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         }
         
-        // ПРОВЕРКА СМЕРТИ (Динамическая зона)
         if(p.y > deathY) loseLife(game, p);
     }
 
@@ -607,4 +603,4 @@ function finalizeDeath(game, p) {
 }
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`Server running on ${PORT}`));z
+http.listen(PORT, () => console.log(`Server running on ${PORT}`));
