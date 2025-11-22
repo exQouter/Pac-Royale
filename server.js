@@ -98,7 +98,7 @@ function makeId(length) {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- ПАТТЕРНЫ (ВОЗВРАЩЕНЫ СТАРЫЕ) ---
+// --- ПАТТЕРНЫ ---
 const PATTERNS = [
     [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,0,1,1], [1,0,0,0,0,0,1,0,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,0,1,1,1,1]],
     [[1,0,0,0,1,0,0,0,0,0], [1,0,1,0,1,0,1,1,1,1], [1,0,1,0,1,0,0,0,0,0], [1,0,1,0,0,0,1,1,1,0], [1,0,1,1,1,0,1,3,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,1,1,0,1,1], [1,0,0,0,0,0,0,0,0,1], [1,1,1,0,1,1,1,1,0,1]],
@@ -196,14 +196,21 @@ function generateRow(game, yIndex) {
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
         
-        // --- SAFETY LANE MECHANIC ---
-        // Оставляем эту логику, чтобы даже в старых паттернах не было полных тупиков
-        if (i === 2 && Math.random() > 0.15) val = 0;
+        // --- SAFETY LANE REMOVED ---
+        // Логика принудительной очистки удалена
         
         const right = 19 - i;
-        if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
-        else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
-        else { row[i] = getContent(); row[right] = getContent(); }
+        
+        if (val === 1) { 
+            row[i] = TILE.WALL; 
+            row[right] = TILE.WALL; 
+        } else if (val === 3) { 
+            row[i] = TILE.POWER; 
+            row[right] = TILE.POWER; 
+        } else { 
+            row[i] = getContent(); 
+            row[right] = getContent(); 
+        }
     }
     game.rows[yIndex] = row;
     if (!game.changes.newRows) game.changes.newRows = {};
@@ -245,13 +252,25 @@ io.on('connection', (socket) => {
         
         const usedColors = currentPlayers.map(p => p.color);
         let myColor = null;
-        if (!usedColors.includes(PLAYER_COLORS[mySlot])) { myColor = PLAYER_COLORS[mySlot]; } 
-        else { for (let color of PLAYER_COLORS) { if (!usedColors.includes(color)) { myColor = color; break; } } }
+        
+        if (!usedColors.includes(PLAYER_COLORS[mySlot])) {
+            myColor = PLAYER_COLORS[mySlot];
+        } else {
+            for (let color of PLAYER_COLORS) {
+                if (!usedColors.includes(color)) {
+                    myColor = color;
+                    break;
+                }
+            }
+        }
+        
         if (!myColor) myColor = PLAYER_COLORS[0];
 
         game.players[socket.id] = {
-            id: socket.id, name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
-            colorIdx: mySlot, color: myColor, 
+            id: socket.id, 
+            name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
+            colorIdx: mySlot, 
+            color: myColor, 
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
@@ -268,10 +287,16 @@ io.on('connection', (socket) => {
         if (currentRoom && lobbies[currentRoom] && !lobbies[currentRoom].isRunning) {
             const game = lobbies[currentRoom];
             const p = game.players[socket.id];
+            
             const isTaken = Object.values(game.players).some(player => player.id !== socket.id && player.color === PLAYER_COLORS[colorIndex]);
+            
             if (p && PLAYER_COLORS[colorIndex] && !isTaken) {
                 p.color = PLAYER_COLORS[colorIndex];
-                io.to(currentRoom).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: currentRoom });
+                io.to(currentRoom).emit('lobbyUpdate', { 
+                    players: Object.values(game.players), 
+                    hostId: game.hostId, 
+                    roomId: currentRoom 
+                });
             }
         }
     });
@@ -290,7 +315,11 @@ io.on('connection', (socket) => {
         if (currentRoom && lobbies[currentRoom]) {
             const game = lobbies[currentRoom];
             resetGame(game);
-            io.to(currentRoom).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: currentRoom });
+            io.to(currentRoom).emit('lobbyUpdate', { 
+                players: Object.values(game.players), 
+                hostId: game.hostId, 
+                roomId: currentRoom 
+            });
         }
     });
 
