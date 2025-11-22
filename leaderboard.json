@@ -24,6 +24,10 @@
     "score": 1120
   },
   {
+    "name": "ARTHUR",
+    "score": 700
+  },
+  {
     "name": "PLAYER",
     "score": 690
   },
@@ -34,9 +38,5 @@
   {
     "name": "PLAYER",
     "score": 530
-  },
-  {
-    "name": "PLAYER",
-    "score": 490
   }
 ]

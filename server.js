@@ -98,7 +98,7 @@ function makeId(length) {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- ПАТТЕРНЫ ---
+// --- ПАТТЕРНЫ (ВОЗВРАЩЕНЫ СТАРЫЕ) ---
 const PATTERNS = [
     [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,0,1,1], [1,0,0,0,0,0,1,0,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,0,1,1,1,1]],
     [[1,0,0,0,1,0,0,0,0,0], [1,0,1,0,1,0,1,1,1,1], [1,0,1,0,1,0,0,0,0,0], [1,0,1,0,0,0,1,1,1,0], [1,0,1,1,1,0,1,3,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,1,1,0,1,1], [1,0,0,0,0,0,0,0,0,1], [1,1,1,0,1,1,1,1,0,1]],
@@ -195,22 +195,12 @@ function generateRow(game, yIndex) {
 
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
-        
-        // --- SAFETY LANE REMOVED ---
-        // Логика принудительной очистки удалена
+        // УБРАНА ЛОГИКА SAFETY LANE
         
         const right = 19 - i;
-        
-        if (val === 1) { 
-            row[i] = TILE.WALL; 
-            row[right] = TILE.WALL; 
-        } else if (val === 3) { 
-            row[i] = TILE.POWER; 
-            row[right] = TILE.POWER; 
-        } else { 
-            row[i] = getContent(); 
-            row[right] = getContent(); 
-        }
+        if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
+        else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
+        else { row[i] = getContent(); row[right] = getContent(); }
     }
     game.rows[yIndex] = row;
     if (!game.changes.newRows) game.changes.newRows = {};
@@ -252,25 +242,13 @@ io.on('connection', (socket) => {
         
         const usedColors = currentPlayers.map(p => p.color);
         let myColor = null;
-        
-        if (!usedColors.includes(PLAYER_COLORS[mySlot])) {
-            myColor = PLAYER_COLORS[mySlot];
-        } else {
-            for (let color of PLAYER_COLORS) {
-                if (!usedColors.includes(color)) {
-                    myColor = color;
-                    break;
-                }
-            }
-        }
-        
+        if (!usedColors.includes(PLAYER_COLORS[mySlot])) { myColor = PLAYER_COLORS[mySlot]; } 
+        else { for (let color of PLAYER_COLORS) { if (!usedColors.includes(color)) { myColor = color; break; } } }
         if (!myColor) myColor = PLAYER_COLORS[0];
 
         game.players[socket.id] = {
-            id: socket.id, 
-            name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
-            colorIdx: mySlot, 
-            color: myColor, 
+            id: socket.id, name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
+            colorIdx: mySlot, color: myColor, 
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
@@ -287,16 +265,10 @@ io.on('connection', (socket) => {
         if (currentRoom && lobbies[currentRoom] && !lobbies[currentRoom].isRunning) {
             const game = lobbies[currentRoom];
             const p = game.players[socket.id];
-            
             const isTaken = Object.values(game.players).some(player => player.id !== socket.id && player.color === PLAYER_COLORS[colorIndex]);
-            
             if (p && PLAYER_COLORS[colorIndex] && !isTaken) {
                 p.color = PLAYER_COLORS[colorIndex];
-                io.to(currentRoom).emit('lobbyUpdate', { 
-                    players: Object.values(game.players), 
-                    hostId: game.hostId, 
-                    roomId: currentRoom 
-                });
+                io.to(currentRoom).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: currentRoom });
             }
         }
     });
@@ -315,11 +287,7 @@ io.on('connection', (socket) => {
         if (currentRoom && lobbies[currentRoom]) {
             const game = lobbies[currentRoom];
             resetGame(game);
-            io.to(currentRoom).emit('lobbyUpdate', { 
-                players: Object.values(game.players), 
-                hostId: game.hostId, 
-                roomId: currentRoom 
-            });
+            io.to(currentRoom).emit('lobbyUpdate', { players: Object.values(game.players), hostId: game.hostId, roomId: currentRoom });
         }
     });
 
@@ -605,16 +573,39 @@ function loseLife(game, p) {
 function finalizeDeath(game, p) {
     p.lives--;
     if(p.lives > 0) {
-        const cy = Math.floor((game.cameraY + 400) / TILE_SIZE); 
-        let foundX = 10;
-        for(let x=2; x<MAP_WIDTH-2; x++) if(getTile(game, x, cy) !== TILE.WALL) { foundX = x; break; } 
-        p.x = foundX * TILE_SIZE; p.y = cy * TILE_SIZE; p.vx = 0; p.vy = 0; p.invulnTimer = 120; p.pvpTimer = 0; p.deathTimer = 0; 
+        let spawnFound = false;
+        let attempts = 0;
+        
+        while (!spawnFound && attempts < 50) {
+            attempts++;
+            const rx = Math.floor(Math.random() * 16) + 2; 
+            const ry = Math.floor((game.cameraY + 200 + Math.random() * 400) / TILE_SIZE);
+            
+            if (getTile(game, rx, ry) !== TILE.WALL) {
+                const px = rx * TILE_SIZE;
+                const py = ry * TILE_SIZE;
+                let safe = true;
+                for (let g of game.ghosts) {
+                    const dist = Math.sqrt(Math.pow(g.x - px, 2) + Math.pow(g.y - py, 2));
+                    if (dist < 3 * TILE_SIZE) { safe = false; break; }
+                }
+                if (safe) { p.x = px; p.y = py; spawnFound = true; }
+            }
+        }
+        
+        if (!spawnFound) {
+            const cy = Math.floor((game.cameraY + 400) / TILE_SIZE); 
+            let foundX = 10;
+            for(let x=2; x<MAP_WIDTH-2; x++) if(getTile(game, x, cy) !== TILE.WALL) { foundX = x; break; } 
+            p.x = foundX * TILE_SIZE; p.y = cy * TILE_SIZE;
+        }
+
+        p.vx = 0; p.vy = 0; p.invulnTimer = 120; p.pvpTimer = 0; p.deathTimer = 0; 
         game.gameSpeed = Math.max(CAM_SPEED_START, game.gameSpeed * 0.7);
     } else { 
         p.alive = false; 
         updateGlobalLeaderboard(p.name, p.score);
         const matchResults = Object.values(game.players).sort((a,b) => b.score - a.score);
-        
         const anyAlive = Object.values(game.players).some(pl => pl.alive);
         const allDead = !anyAlive;
 
@@ -625,9 +616,7 @@ function finalizeDeath(game, p) {
             allDead: allDead
         });
 
-        if (allDead) {
-            io.to(game.id).emit('matchEnded');
-        }
+        if (allDead) io.to(game.id).emit('matchEnded');
     }
 }
 

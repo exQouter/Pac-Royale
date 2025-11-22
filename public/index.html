@@ -63,6 +63,35 @@
         .color-swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #333; cursor: pointer; transition: transform 0.1s; }
         .color-swatch:hover { transform: scale(1.2); border-color: #fff; }
         .color-swatch.disabled { opacity: 0.2; cursor: not-allowed; transform: none; border-color: #333; }
+
+        /* UPDATED MUTE BUTTON (WITHOUT YELLOW SHADOW) */
+        #mute-btn {
+            position: fixed;
+            bottom: 40px;
+            left: calc(50% + 330px);
+            background: transparent;
+            color: #555;
+            border: none;
+            opacity: 0.3;
+            box-shadow: none !important; 
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 24px;
+            padding: 0;
+            display: none;
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            outline: none; 
+        }
+        #mute-btn:hover { 
+            color: white;
+            opacity: 1;
+            transform: scale(1.1);
+            text-shadow: 0 0 5px #fff; 
+        }
     </style>
 </head>
 <body>
@@ -87,7 +116,6 @@
         <h2 style="font-size:16px; color:#aaa;">LOBBY ROOM</h2>
         <div class="lobby-code" id="lobby-code-display" onclick="copyLink(); uiClick()">CODE: ????</div>
         
-        <!-- Цветовая палитра -->
         <div style="margin-top: 10px; font-size: 10px; color: #ccc;">CHOOSE COLOR:</div>
         <div class="color-picker" id="color-picker-container">
             <div class="color-swatch" data-idx="0" style="background: #FFFF00;" onclick="selectColor(0)"></div>
@@ -128,6 +156,8 @@
         </div>
     </div>
     
+    <button id="mute-btn" onclick="toggleMute()">🔊</button>
+
     <div id="game-over" class="screen" style="min-width: 600px;">
         <h1 style="color:red; margin-bottom: 10px;">GAME OVER</h1>
         <p id="final-score" style="color:white; font-size:14px; margin:5px 0;"></p>
@@ -160,7 +190,13 @@
         let localRows = {}; 
         let currState = null;
 
-        // АВТО-ВХОД: Если есть код приглашения, сразу открываем меню и подставляем код
+        window.onload = () => {
+            const savedNick = localStorage.getItem('pac_royale_nickname');
+            if (savedNick) {
+                document.getElementById('nickname').value = savedNick;
+            }
+        };
+
         if(urlParams.has('code')) {
             document.getElementById('lobby-code-input').value = urlParams.get('code');
             document.getElementById('intro-screen').classList.remove('visible');
@@ -168,30 +204,64 @@
         }
 
         class PacmanSynth {
-            constructor() { this.ctx = new (window.AudioContext||window.webkitAudioContext)(); this.masterGain = this.ctx.createGain(); this.masterGain.gain.value = 0.15; this.masterGain.connect(this.ctx.destination); this.sirenOsc = null; }
+            constructor() { 
+                this.ctx = new (window.AudioContext||window.webkitAudioContext)(); 
+                this.masterGain = this.ctx.createGain(); 
+                this.masterGain.gain.value = 0.15; 
+                this.masterGain.connect(this.ctx.destination); 
+                this.sirenOsc = null; 
+                this.isMuted = false;
+            }
             resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
-            createSoftOsc(type, freq, t) { const o=this.ctx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1000; const g=this.ctx.createGain(); o.connect(f); f.connect(g); g.connect(this.masterGain); return {osc:o, gain:g}; }
-            playClick() { const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',800,t); gain.gain.setValueAtTime(0.1,t); gain.gain.exponentialRampToValueAtTime(0.01,t+0.1); osc.start(t); osc.stop(t+0.1); }
-            playWaka() { const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.linearRampToValueAtTime(50,t+0.15); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.8,t+0.02); g.gain.linearRampToValueAtTime(0,t+0.15); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+0.15); }
-            playEat() { const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',300,t); osc.frequency.exponentialRampToValueAtTime(50,t+0.1); gain.gain.setValueAtTime(0.3,t); gain.gain.linearRampToValueAtTime(0,t+0.1); osc.start(t); osc.stop(t+0.1); }
-            playDeath() { this.stopSiren(); const t=this.ctx.currentTime; for(let i=0;i<8;i++){ const {osc,gain}=this.createSoftOsc('triangle',300-i*30,t+i*0.1); osc.frequency.linearRampToValueAtTime(50,t+i*0.1+0.1); gain.gain.setValueAtTime(0.3,t+i*0.1); gain.gain.linearRampToValueAtTime(0,t+i*0.1+0.1); osc.start(t+i*0.1); osc.stop(t+i*0.1+0.1); } }
-            playIntro() { const t=this.ctx.currentTime, notes=[246,493,369,311,493,369,311,493,369,311,246]; let time=t; notes.forEach(f=>{ const {osc,gain}=this.createSoftOsc('triangle',f,time); gain.gain.setValueAtTime(0.2,time); gain.gain.linearRampToValueAtTime(0,time+0.08); osc.start(time); osc.stop(time+0.1); time+=0.12; }); }
-            startSiren(type) { if(this.sirenOsc) return; const t=this.ctx.currentTime; this.sirenOsc=this.ctx.createOscillator(); this.sirenOsc.type=type==='power'?'triangle':'sine'; this.sirenOsc.frequency.setValueAtTime(type==='power'?300:150,t); const lfo=this.ctx.createOscillator(); lfo.frequency.value=type==='power'?5:1.5; const lg=this.ctx.createGain(); lg.gain.value=20; lfo.connect(lg); lg.connect(this.sirenOsc.frequency); lfo.start(t); const mg=this.ctx.createGain(); mg.gain.value=0.1; this.sirenOsc.connect(mg); mg.connect(this.masterGain); this.sirenOsc.start(t); this.sirenLFO=lfo; this.currentSirenType=type; }
+            toggleMute() {
+                this.isMuted = !this.isMuted;
+                if (this.isMuted) {
+                    this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
+                } else {
+                    this.masterGain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                }
+                return this.isMuted;
+            }
+            createSoftOsc(type, freq, t) { if(this.isMuted) return {osc:{start:()=>{},stop:()=>{},connect:()=>{}}, gain:{gain:{setValueAtTime:()=>{},exponentialRampToValueAtTime:()=>{},linearRampToValueAtTime:()=>{}}}}; const o=this.ctx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1000; const g=this.ctx.createGain(); o.connect(f); f.connect(g); g.connect(this.masterGain); return {osc:o, gain:g}; }
+            playClick() { if(this.isMuted) return; const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',800,t); gain.gain.setValueAtTime(0.1,t); gain.gain.exponentialRampToValueAtTime(0.01,t+0.1); osc.start(t); osc.stop(t+0.1); }
+            playWaka() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.linearRampToValueAtTime(50,t+0.15); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.8,t+0.02); g.gain.linearRampToValueAtTime(0,t+0.15); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+0.15); }
+            playEat() { if(this.isMuted) return; const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',300,t); osc.frequency.exponentialRampToValueAtTime(50,t+0.1); gain.gain.setValueAtTime(0.3,t); gain.gain.linearRampToValueAtTime(0,t+0.1); osc.start(t); osc.stop(t+0.1); }
+            playDeath() { if(this.isMuted) return; this.stopSiren(); const t=this.ctx.currentTime; for(let i=0;i<8;i++){ const {osc,gain}=this.createSoftOsc('triangle',300-i*30,t+i*0.1); osc.frequency.linearRampToValueAtTime(50,t+i*0.1+0.1); gain.gain.setValueAtTime(0.3,t+i*0.1); gain.gain.linearRampToValueAtTime(0,t+i*0.1+0.1); osc.start(t+i*0.1); osc.stop(t+i*0.1+0.1); } }
+            playIntro() { if(this.isMuted) return; const t=this.ctx.currentTime, notes=[246,493,369,311,493,369,311,493,369,311,246]; let time=t; notes.forEach(f=>{ const {osc,gain}=this.createSoftOsc('triangle',f,time); gain.gain.setValueAtTime(0.2,time); gain.gain.linearRampToValueAtTime(0,time+0.08); osc.start(time); osc.stop(time+0.1); time+=0.12; }); }
+            startSiren(type) { if(this.isMuted || this.sirenOsc) return; const t=this.ctx.currentTime; this.sirenOsc=this.ctx.createOscillator(); this.sirenOsc.type=type==='power'?'triangle':'sine'; this.sirenOsc.frequency.setValueAtTime(type==='power'?300:150,t); const lfo=this.ctx.createOscillator(); lfo.frequency.value=type==='power'?5:1.5; const lg=this.ctx.createGain(); lg.gain.value=20; lfo.connect(lg); lg.connect(this.sirenOsc.frequency); lfo.start(t); const mg=this.ctx.createGain(); mg.gain.value=0.1; this.sirenOsc.connect(mg); mg.connect(this.masterGain); this.sirenOsc.start(t); this.sirenLFO=lfo; this.currentSirenType=type; }
             stopSiren() { if(this.sirenOsc){ try{this.sirenOsc.stop(); if(this.sirenLFO)this.sirenLFO.stop();}catch(e){} this.sirenOsc=null; } this.currentSirenType=null; }
-            checkSirenUpdate(newType) { if(this.sirenOsc && this.currentSirenType!==newType) { this.stopSiren(); this.startSiren(newType); } else if(!this.sirenOsc) this.startSiren(newType); }
-            playWarning() { const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(600,t); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.05); g.gain.setValueAtTime(0.15,t+0.3); g.gain.linearRampToValueAtTime(0,t+0.35); g.gain.linearRampToValueAtTime(0.15,t+0.7); g.gain.setValueAtTime(0.15,t+0.95); g.gain.linearRampToValueAtTime(0,t+1.0); g.gain.linearRampToValueAtTime(0.15,t+1.35); g.gain.setValueAtTime(0.15,t+1.6); g.gain.linearRampToValueAtTime(0,t+1.65); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+1.7); }
-            playRocket() { const t=this.ctx.currentTime; const noise=this.ctx.createBufferSource(); noise.buffer=this.createNoiseBuffer(); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(800,t); f.frequency.exponentialRampToValueAtTime(100,t+1.0); const g=this.ctx.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.01,t+1.0); noise.connect(f); f.connect(g); g.connect(this.masterGain); noise.start(t); }
+            checkSirenUpdate(newType) { if(this.isMuted) { this.stopSiren(); return; } if(this.sirenOsc && this.currentSirenType!==newType) { this.stopSiren(); this.startSiren(newType); } else if(!this.sirenOsc) this.startSiren(newType); }
+            playWarning() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(600,t); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.05); g.gain.setValueAtTime(0.15,t+0.3); g.gain.linearRampToValueAtTime(0,t+0.35); g.gain.linearRampToValueAtTime(0.15,t+0.7); g.gain.setValueAtTime(0.15,t+0.95); g.gain.linearRampToValueAtTime(0,t+1.0); g.gain.linearRampToValueAtTime(0.15,t+1.35); g.gain.setValueAtTime(0.15,t+1.6); g.gain.linearRampToValueAtTime(0,t+1.65); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+1.7); }
+            playRocket() { if(this.isMuted) return; const t=this.ctx.currentTime; const noise=this.ctx.createBufferSource(); noise.buffer=this.createNoiseBuffer(); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(800,t); f.frequency.exponentialRampToValueAtTime(100,t+1.0); const g=this.ctx.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.01,t+1.0); noise.connect(f); f.connect(g); g.connect(this.masterGain); noise.start(t); }
             createNoiseBuffer() { const b = this.ctx.createBuffer(1, this.ctx.sampleRate*1.5, this.ctx.sampleRate); const d = b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
             stopAll() { this.stopSiren(); if(this.ctx.state==='running') this.ctx.suspend(); }
         }
         const synth = new PacmanSynth();
 
+        function toggleMute() {
+            const isMuted = synth.toggleMute();
+            const btn = document.getElementById('mute-btn');
+            btn.innerText = isMuted ? '🔇' : '🔊';
+            canvas.focus(); 
+        }
+
         function uiClick() { synth.resume(); synth.playClick(); }
         function enterMenu() { synth.resume(); synth.playClick(); document.getElementById('intro-screen').classList.remove('visible'); document.getElementById('menu-screen').classList.add('visible'); }
         function backToIntro() { document.getElementById('menu-screen').classList.remove('visible'); document.getElementById('intro-screen').classList.add('visible'); synth.stopSiren(); }
         function getNick() { return document.getElementById('nickname').value.trim() || "PLAYER"; }
-        function createLobby() { socket.emit('createLobby', { nickname: getNick() }); }
-        function joinLobby() { const c = document.getElementById('lobby-code-input').value.trim(); if(!c) { showErr('ENTER CODE'); return; } socket.emit('joinLobby', { code: c, nickname: getNick() }); }
+        
+        function saveNick() {
+            const nick = getNick();
+            localStorage.setItem('pac_royale_nickname', nick);
+        }
+
+        function createLobby() { saveNick(); socket.emit('createLobby', { nickname: getNick() }); }
+        function joinLobby() { 
+            const c = document.getElementById('lobby-code-input').value.trim(); 
+            if(!c) { showErr('ENTER CODE'); return; } 
+            saveNick();
+            socket.emit('joinLobby', { code: c, nickname: getNick() }); 
+        }
         function startGame() { socket.emit('startGame'); }
         function showErr(msg) { document.getElementById('menu-error').innerText = msg; }
         function copyLink() { navigator.clipboard.writeText(window.location.origin + "/?code=" + document.getElementById('lobby-code-display').innerText.split(': ')[1]); alert("Link copied!"); }
@@ -231,6 +301,7 @@
             document.getElementById('menu-screen').classList.remove('visible'); 
             document.getElementById('lobby-screen').classList.add('visible'); 
             canvas.style.display = 'none'; 
+            document.getElementById('mute-btn').style.display = 'none'; // Hide mute button in lobby
             document.getElementById('lobby-code-display').innerText = `CODE: ${d.roomId}`; 
             renderLobbySlots(d.players); 
             if(socket.id === d.hostId) { document.getElementById('start-game-btn').style.display = 'block'; document.getElementById('waiting-msg').style.display = 'none'; } 
@@ -244,6 +315,7 @@
             hideSpectatorBtn(); 
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); 
             canvas.style.display = 'block'; 
+            document.getElementById('mute-btn').style.display = 'flex'; // Show mute button
             isJoined = true; 
             isSpectating = false; 
             synth.resume();
@@ -269,14 +341,17 @@
             document.getElementById('game-over').classList.add('visible'); 
             document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
             isJoined = false; isSpectating = true; hideSpectatorBtn(); 
+            document.getElementById('mute-btn').style.display = 'none'; // Hide mute button on game over
             
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#9900ff"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
-            const cherryIcon = '<span style="font-size:30px">🍒</span>';
+            // ИСПРАВЛЕНО: Вишенка 20px (было 30px)
+            const cherryIcon = '<span style="font-size:20px">🍒</span>';
             
             document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherryIcon}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
             
+            // НОВЫЕ КНОПКИ
             const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
             const btnText = data.allDead ? 'PLAY AGAIN 🏠' : 'WAITING...';
             
@@ -298,7 +373,7 @@
                 btn.style.cursor = 'pointer';
                 btn.innerText = 'PLAY AGAIN 🏠';
             }
-            synth.stopAll(); // Остановить все звуки
+            synth.stopAll(); 
         });
 
         socket.on('leaderboardUpdate', d => leaderboardData = d);
@@ -360,7 +435,7 @@
                     } else if (t === 3) { ctx.fillStyle = (now%400 < 200) ? '#fff' : '#ffb8ae'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
                     } else if (t === 4) { ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
                     } else if (t === 5) { 
-                        // EVIL (Tile 5) - ТЕПЕРЬ КРАСНЫЙ
+                        // EVIL (RED)
                         ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); 
                         ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); 
                         ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
@@ -412,7 +487,6 @@
                 if (p.deathTimer > 0) { const pr = 1 - (p.deathTimer / 60), sa = -Math.PI/2 + (pr * Math.PI), ea = -Math.PI/2 + (2*Math.PI - pr * Math.PI); ctx.fillStyle = p.color; ctx.beginPath(); ctx.moveTo(ix + 15, sy + 15); ctx.arc(ix + 15, sy + 15, 12, sa, ea); ctx.fill(); continue; }
                 if(p.invulnTimer > 0 && now%200 < 100) continue;
                 
-                // ЦВЕТ ИГРОКА (Если PVP - то Красный, иначе свой)
                 ctx.fillStyle = (p.pvpTimer > 0) ? '#FF0000' : p.color; 
                 
                 ctx.beginPath();
@@ -424,35 +498,26 @@
             
             popups = popups.filter(p => p.life > 0);
             popups.forEach(p => { p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - visualCamY); });
+            const ty = canvas.height - 40; if(s.cd > 0) deathZoneY = canvas.height + 100; else deathZoneY += (ty - deathZoneY) * 0.02; 
             
-            // RENDER SURGE (Цунами)
             const surgeHeight = s.surgeHeight || 0;
-            const ty = canvas.height - 40; 
-            
-            if(s.cd > 0) deathZoneY = canvas.height + 100; 
-            else deathZoneY += (ty - deathZoneY) * 0.02; 
-            
-            const visualDeathY = deathZoneY - surgeHeight; // Визуальная граница смерти
-            
-            const tm = now/200; 
-            const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
-            
-            // РИСУЕМ МАССИВ ПРИВИДЕНИЙ (ЗАПОЛНЕНИЕ)
-            // Начинаем с визуальной границы и идем вниз до конца экрана + запас
+            const visualDeathY = deathZoneY - surgeHeight;
+
+            const tm = now/200; const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
             for (let gy = visualDeathY; gy < canvas.height + 60; gy += 30) {
                 const rowIndex = Math.floor(gy / 30);
                 for(let i=-1; i<22; i++) { 
-                    // Хаотичное смещение
                     const chaosX = Math.sin(tm + i + rowIndex) * 3;
                     const chaosY = Math.cos(tm + i * 0.5 + rowIndex) * 3;
                     
-                    // Цвет (чередуется)
-                    const color = gc[(i + rowIndex) % 4];
+                    // New hashing formula to prevent clusters
+                    const seed = (i * 137) + (rowIndex * 149);
+                    const rnd = Math.abs(Math.sin(seed) * 10000);
+                    const colorIndex = Math.floor(rnd) % 4;
                     
-                    drawGhost(ctx, i*30 + chaosX, gy + chaosY, color, 0, -1, 0); 
+                    drawGhost(ctx, i*30 + chaosX, gy + chaosY, gc[colorIndex], 0, -1, 0); 
                 }
             }
-
             ctx.restore(); 
         }
 
