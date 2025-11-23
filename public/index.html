@@ -18,33 +18,23 @@
 
         /* --- DESKTOP LAYOUT --- */
         
-        /* Fixed Aspect Ratio Canvas */
         canvas { 
             border: 6px solid #1919A6; background: black; image-rendering: pixelated; 
             box-shadow: 0 0 40px rgba(25,25,166,0.4); 
-            display: none; /* Hidden until game starts */
-            
-            /* Strict Aspect Ratio Logic */
-            height: auto;
-            width: auto;
-            max-width: 100%;
-            max-height: calc(100vh - 60px);
-            aspect-ratio: 3/4; /* Keeps it 600x800 */
-            object-fit: contain;
-            
+            display: none; 
+            height: auto; width: auto; max-width: 100%; max-height: calc(100vh - 60px);
+            aspect-ratio: 3/4; object-fit: contain;
             position: relative; z-index: 10;
         }
 
-        /* UI Wrapper - Hidden by default */
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
-            display: none; /* TASK 2: Hidden in menu */
-            justify-content: center;
+            display: none; justify-content: center;
         }
 
         /* Desktop Side Panels */
         .side-panel { 
-            width: 140px; /* TASK 5: Restored Width */
+            width: 140px; 
             height: 160px; 
             background: #000; border: 4px solid var(--p-color); 
             padding: 10px; display: flex; flex-direction: column; align-items: center; 
@@ -55,15 +45,14 @@
         }
         .side-panel.active { opacity: 1; transform: translate(-2px, -2px); box-shadow: 8px 8px 0px color-mix(in srgb, var(--p-color), black 50%); }
 
-        /* TASK 1: Positioning from Center + Spacing */
+        /* ИСПРАВЛЕНИЕ 1: Увеличен отступ (top) для нижних панелей (p2, p3), чтобы они не наезжали друг на друга */
         /* Center (50%) - Half Canvas (300px) - Gap (15px) - PanelWidth (168px incl border/pad) */
-        /* Note: Using Calc to pin them relative to the game board */
         
         #p0 { top: 40px;  left: calc(50% - 300px - 15px - 170px); }
-        #p2 { top: 230px; left: calc(50% - 300px - 15px - 170px); } /* Vertical gap */
+        #p2 { top: 260px; left: calc(50% - 300px - 15px - 170px); } /* Было 230px, стало 260px (+30px зазора) */
         
         #p1 { top: 40px;  right: calc(50% - 300px - 15px - 170px); }
-        #p3 { top: 230px; right: calc(50% - 300px - 15px - 170px); }
+        #p3 { top: 260px; right: calc(50% - 300px - 15px - 170px); } /* Было 230px, стало 260px */
 
         .pac-avatar { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 15px; background: conic-gradient(transparent 30deg, var(--p-color) 30deg 330deg, transparent 330deg); transform: rotate(90deg); border: none; box-shadow: none; }
         .pac-avatar::after { display: none; }
@@ -123,7 +112,7 @@
         #mute-btn { position: fixed; bottom: 40px; right: 20px; background: transparent; color: #555; border: none; opacity: 0.5; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; padding: 0; display: none; z-index: 200; align-items: center; justify-content: center; outline: none; box-shadow: none;}
         #mute-btn:hover { color: white; opacity: 1; transform: scale(1.1); text-shadow: 0 0 5px #fff; }
 
-        /* --- MOBILE LAYOUT (TASK 4 - FIXED BORDER) --- */
+        /* --- MOBILE LAYOUT --- */
         @media (max-width: 900px) {
             body { 
                 flex-direction: column; 
@@ -133,61 +122,34 @@
             }
 
             canvas { 
-                /* Отключаем растягивание, чтобы рамка облегала контент */
                 flex-grow: 0; 
-                
-                /* Разрешаем браузеру вычислять размеры на основе aspect-ratio */
-                width: auto;
-                height: auto;
-                
-                /* Ограничиваем максимальные размеры */
-                max-width: 100%; 
-                max-height: calc(100vh - 70px); 
-                
-                /* Центрирование */
+                width: auto; height: auto;
+                max-width: 100%; max-height: calc(100vh - 70px); 
                 margin: 5px auto;
-                
-                /* Явно задаем границу (как на ПК) */
                 border: 6px solid #1919A6;
-                box-sizing: border-box; /* Важно: рамка входит в размеры */
-                
+                box-sizing: border-box; 
                 order: 2; 
             }
 
             /* UI Layer - Single Row Top */
             #ui-layer {
-                /* Display is toggled via JS, but if active, it's flex */
-                position: relative;
-                width: 100%;
-                height: 60px; 
-                background: #000;
-                border-bottom: 2px solid #333;
-                pointer-events: auto;
-                order: 1; 
-                flex-direction: row;
-                justify-content: space-evenly; 
-                align-items: center;
+                position: relative; width: 100%; height: 60px; 
+                background: #000; border-bottom: 2px solid #333;
+                pointer-events: auto; order: 1; 
+                flex-direction: row; justify-content: space-evenly; align-items: center;
                 padding: 0;
             }
 
             .side-panel {
-                /* Reset Desktop Positioning */
-                position: relative;
-                top: auto !important; left: auto !important; right: auto !important;
-                width: 22%; 
-                height: 100%;
-                border: none;
-                border-bottom: 4px solid var(--p-color); 
-                box-shadow: none !important;
-                background: transparent;
-                padding: 2px;
+                position: relative; top: auto !important; left: auto !important; right: auto !important;
+                width: 22%; height: 100%;
+                border: none; border-bottom: 4px solid var(--p-color); box-shadow: none !important;
+                background: transparent; padding: 2px;
                 order: var(--order); 
             }
             .side-panel.active { background: rgba(255,255,255,0.1); }
 
-            /* Compact content */
-            .pac-avatar { display: none; }
-            .stat-label { display: none; }
+            .pac-avatar, .stat-label { display: none; }
             .player-name-ui { font-size: 8px; margin: 2px 0; }
             .score-box { font-size: 9px; font-weight: bold; }
             .lives-box { font-size: 8px; margin-top: 2px; }
@@ -195,19 +157,48 @@
             #mute-btn { top: 70px; right: 10px; bottom: auto; width: 30px; height: 30px; font-size: 16px; background: rgba(0,0,0,0.5); border-radius: 4px; }
             
             /* COMPACT MOBILE MENU */
-            .menu-grid { 
-                grid-template-columns: 1fr; /* Single column */
-                gap: 10px; 
-            }
-            .menu-divider { 
-                height: 1px; 
-                width: 100%; 
-                min-height: 1px; 
-            }
+            .menu-grid { grid-template-columns: 1fr; gap: 10px; }
+            .menu-divider { height: 1px; width: 100%; min-height: 1px; }
             button { padding: 10px; font-size: 10px; margin-top: 5px; }
             input { padding: 10px; font-size: 12px; }
             h1 { font-size: 24px !important; margin-bottom: 20px !important; }
-            .screen { padding: 20px; }
+            
+            /* ИСПРАВЛЕНИЕ 2 & 3: Адаптация модальных окон (Лобби и Game Over) */
+            .screen { 
+                padding: 15px; /* Меньше отступы */
+                min-width: 0 !important; /* Убираем жесткий минимум */
+                width: 90% !important; /* Ширина по экрану */
+                max-width: 95% !important;
+            }
+
+            /* Фикс для Лобби */
+            #lobby-screen {
+                min-width: 0 !important;
+            }
+            .lobby-container {
+                gap: 5px; /* Уменьшаем расстояние между слотами */
+            }
+            .lobby-slot {
+                width: 60px; /* Уменьшаем ширину слотов (было 80) */
+                height: 90px;
+                border-width: 2px;
+            }
+            .slot-pacman { width: 30px; height: 30px; }
+            .slot-name { font-size: 8px; }
+            .lobby-code { font-size: 16px; padding: 5px; } /* Код поменьше */
+
+            /* Фикс для Game Over */
+            #game-over {
+                min-width: 0 !important;
+            }
+            #game-over h1 { font-size: 20px !important; margin-bottom: 5px; }
+            .match-leaderboard td { padding: 5px; font-size: 8px; }
+            .stat-item { width: 40px; font-size: 8px; }
+            .icon-svg { width: 20px; height: 20px; }
+            .game-over-buttons { margin-top: 15px; gap: 5px; }
+            .btn-spectate, .btn-play-again, .btn-main-menu {
+                padding: 8px; font-size: 9px; width: 100%; margin-top: 5px;
+            }
         }
     </style>
 </head>
