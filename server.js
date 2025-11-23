@@ -32,6 +32,7 @@ const PVP_MODE_DURATION = 300;
 const DEATH_ANIMATION_FRAMES = 60;
 const SPEED_BOOST_DURATION = 420; 
 const SCORE_MILESTONE = 10000;    
+const FRUIT_SPAWN_SCORE_STEP = 700; // Каждые 700 очков спавним фрукт
 
 const ROCKET_START_TIME = 10800; 
 const ROCKET_WAVE_INTERVAL = 180; 
@@ -51,7 +52,24 @@ const TRAIN_RED_TIME = 60;
 const TRAIN_SPEED = 12.0;      
 const TRAIN_LENGTH = 40;       
 
-const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
+// --- ТАЙЛЫ ---
+const TILE = { 
+    EMPTY: 0, 
+    WALL: 1, 
+    DOT: 2, 
+    POWER: 3, 
+    CHERRY: 4, 
+    EVIL: 5, 
+    HEART: 6,
+    STRAWBERRY: 7,
+    ORANGE: 8,
+    APPLE: 9,
+    MELON: 10,
+    GALAXIAN: 11,
+    BELL: 12,
+    KEY: 13
+};
+
 const lobbies = {};
 
 // --- ЛИДЕРБОРД ---
@@ -111,6 +129,7 @@ function createGame(roomId) {
         isRunning: false, hostId: null, countdown: 0, startTime: 0,
         changes: { removedDots: [], newRows: {} },
         speedBoostTimer: 0, globalThreshold: 0, frameCounter: 0,
+        pendingFruits: 0, // Очередь на спавн фруктов
         rocketState: { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] },
         surge: { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) },
         patternsSinceTrain: 0,
@@ -136,6 +155,7 @@ function initMap(game) {
     game.train.state = 'OFF';
     game.patternsSinceTrain = 0;
     game.trainGapRows = 0;
+    game.pendingFruits = 0;
     
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
@@ -151,6 +171,7 @@ function resetGame(game) {
     game.speedBoostTimer = 0;
     game.globalThreshold = 0;
     game.frameCounter = 0;
+    game.pendingFruits = 0;
     game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
     game.surge = { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) };
     game.train = { state: 'OFF', targetY: 0, timer: 0, dir: 1, ghosts: [] };
@@ -169,8 +190,23 @@ function resetGame(game) {
         p.vx = 0; p.vy = 0; p.nextDir = null;
         p.score = 0; p.lives = 3; p.alive = true;
         p.invulnTimer = 0; p.pvpTimer = 0; p.deathTimer = 0;
-        p.stats = { cherries: 0, ghosts: 0, players: 0, evil: 0 };
+        p.lastFruitStep = 0;
+        p.lastMilestone = 0;
+        p.itemsCollected = {}; // Для детальной статистики
+        p.stats = { ghosts: 0, players: 0, evil: 0 };
     }
+}
+
+function getRandomFruit() {
+    const f = Math.random();
+    if (f < 0.40) return TILE.CHERRY;
+    if (f < 0.60) return TILE.STRAWBERRY;
+    if (f < 0.75) return TILE.ORANGE;
+    if (f < 0.85) return TILE.APPLE;
+    if (f < 0.92) return TILE.MELON;
+    if (f < 0.96) return TILE.GALAXIAN;
+    if (f < 0.98) return TILE.BELL;
+    return TILE.KEY;
 }
 
 function generateRow(game, yIndex) {
@@ -216,10 +252,22 @@ function generateRow(game, yIndex) {
     const half = game.currentPattern[9 - game.patternRowIndex];
     game.patternRowIndex++;
     const row = new Array(MAP_WIDTH);
+    
     function getContent() {
         const r = Math.random();
-        if (r < 0.0005) return TILE.EVIL; else if (r < 0.0020) return TILE.HEART; else if (r < 0.0070) return TILE.CHERRY; return TILE.DOT;
+        // 1. Приоритет: Спавн предметов по очкам
+        if (game.pendingFruits > 0 && Math.random() < 0.1) {
+            game.pendingFruits--;
+            return getRandomFruit();
+        }
+        
+        // 2. Обычный спавн (только EVIL и HEART)
+        if (r < 0.0005) return TILE.EVIL; 
+        else if (r < 0.0020) return TILE.HEART; 
+        
+        return TILE.DOT;
     }
+
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
         const right = 19 - i;
@@ -274,7 +322,10 @@ io.on('connection', (socket) => {
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
-            stats: { cherries: 0, ghosts: 0, players: 0, evil: 0 }
+            lastFruitStep: 0,
+            lastMilestone: 0,
+            itemsCollected: {},
+            stats: { ghosts: 0, players: 0, evil: 0 }
         };
         currentRoom = roomId;
         socket.join(roomId);
@@ -566,6 +617,14 @@ function updateGamePhysics(game) {
         if(p.invulnTimer > 0) p.invulnTimer--;
         if(p.pvpTimer > 0) p.pvpTimer--;
         
+        // --- 700 Points Logic for Fruit Spawning ---
+        const steps = Math.floor(p.score / FRUIT_SPAWN_SCORE_STEP);
+        if (steps > p.lastFruitStep) {
+            game.pendingFruits += (steps - p.lastFruitStep);
+            p.lastFruitStep = steps;
+        }
+
+        // --- 10000 Points Logic for 1UP ---
         const myMilestone = Math.floor(p.score / SCORE_MILESTONE);
         if (myMilestone > game.globalThreshold) {
             game.globalThreshold = myMilestone; 
@@ -573,6 +632,15 @@ function updateGamePhysics(game) {
             p.invulnTimer = SPEED_BOOST_DURATION; 
             io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "HYPER SPEED!", color: "#FFFF00"});
             io.to(game.id).emit('sfx', 'power');
+        }
+        // Individual 1UP check
+        if (myMilestone > p.lastMilestone) {
+            p.lastMilestone = myMilestone;
+            if (p.lives < 3) {
+                p.lives++;
+                io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"});
+                io.to(game.id).emit('sfx', 'eatFruit');
+            }
         }
 
         const gx = Math.round(p.x / TILE_SIZE), gy = Math.round(p.y / TILE_SIZE);
@@ -598,9 +666,25 @@ function updateGamePhysics(game) {
             if(!game.changes.removedDots) game.changes.removedDots = [];
             game.changes.removedDots.push({x: gx, y: gy});
             
+            // --- HELPER FOR COLLECTING ITEM ---
+            const collectItem = (type, points, color, popupText) => {
+                p.score += points;
+                p.itemsCollected[type] = (p.itemsCollected[type] || 0) + 1;
+                if (popupText) io.to(game.id).emit('popup', {x: p.x, y: p.y, text: popupText, color: color});
+                io.to(game.id).emit('sfx', 'eatFruit');
+            };
+
             if(tile === TILE.DOT) { p.score += 10; }
             else if(tile === TILE.POWER) { p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
-            else if(tile === TILE.CHERRY) { p.score += 100; p.stats.cherries++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100"}); io.to(game.id).emit('sfx', 'eatFruit'); }
+            else if(tile === TILE.CHERRY) { collectItem(TILE.CHERRY, 100, "#ffb8ae", "+100"); }
+            else if(tile === TILE.STRAWBERRY) { collectItem(TILE.STRAWBERRY, 300, "#de0000", "+300"); }
+            else if(tile === TILE.ORANGE) { collectItem(TILE.ORANGE, 500, "#ffae00", "+500"); }
+            else if(tile === TILE.APPLE) { collectItem(TILE.APPLE, 700, "#ff0000", "+700"); }
+            else if(tile === TILE.MELON) { collectItem(TILE.MELON, 1000, "#00ff00", "+1000"); }
+            else if(tile === TILE.GALAXIAN) { collectItem(TILE.GALAXIAN, 2000, "#ffff00", "+2000"); }
+            else if(tile === TILE.BELL) { collectItem(TILE.BELL, 3000, "#ffff00", "+3000"); }
+            else if(tile === TILE.KEY) { collectItem(TILE.KEY, 5000, "#00ffff", "+5000"); }
+            
             else if(tile === TILE.EVIL) { p.pvpTimer = PVP_MODE_DURATION; p.stats.evil++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         }
@@ -701,7 +785,15 @@ function finalizeDeath(game, p) {
         const matchResults = Object.values(game.players).sort((a,b) => b.score - a.score);
         const anyAlive = Object.values(game.players).some(pl => pl.alive);
         const allDead = !anyAlive;
-        io.to(p.id).emit('gameOver', { score: p.score, stats: p.stats, leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})), allDead: allDead });
+        
+        // Передаем collected items для статистики
+        io.to(p.id).emit('gameOver', { 
+            score: p.score, 
+            stats: p.stats, 
+            items: p.itemsCollected, // Передаем словарь собранных предметов
+            leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})), 
+            allDead: allDead 
+        });
         if (allDead) io.to(game.id).emit('matchEnded');
     }
 }

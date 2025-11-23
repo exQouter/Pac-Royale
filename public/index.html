@@ -65,10 +65,7 @@
         .menu-label { font-size: 10px; color: #888; margin-bottom: 5px; text-align: center; }
         
         .lobby-container { display: flex; gap: 15px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
-        
-        /* UPDATED: Lobby slot size increased */
         .lobby-slot { width: 110px; height: 130px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
-        
         .lobby-slot.filled { border-color: #fff; background: #111; }
         .slot-label { font-size: 8px; color: #666; position: absolute; top: 5px; }
         .slot-name { font-size: 10px; color: #fff; margin-top: 10px; word-break: break-all; }
@@ -82,9 +79,9 @@
         .leader-row { background: #222; }
         .leader-row td { padding: 10px; font-size: 10px; }
         .leader-row.first-place { border: 2px solid #FFD700; background: #333; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
-        .match-stats { display: flex; justify-content: center; gap: 20px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #444; flex-wrap: wrap; }
-        .stat-item { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 10px; color: #aaa; width: 60px; }
-        .icon-svg { width: 30px; height: 30px; display: block; }
+        .match-stats { display: flex; justify-content: center; gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #444; flex-wrap: wrap; max-width: 500px; margin-left: auto; margin-right: auto;}
+        .stat-item { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 9px; color: #aaa; width: 50px; margin-bottom: 10px; }
+        .icon-svg { width: 25px; height: 25px; display: block; }
         
         .game-over-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
         .btn-spectate { background: #555; border-color: #777; color: white; }
@@ -120,10 +117,7 @@
             .screen { padding: 15px; min-width: 0 !important; width: 90% !important; max-width: 95% !important; }
             #lobby-screen { min-width: 0 !important; }
             .lobby-container { gap: 5px; }
-            
-            /* UPDATED: Mobile lobby slot size increased */
             .lobby-slot { width: 85px; height: 100px; border-width: 2px; }
-            
             .slot-pacman { width: 30px; height: 30px; }
             .slot-name { font-size: 8px; }
             .lobby-code { font-size: 16px; padding: 5px; }
@@ -355,15 +349,55 @@
             const b = document.querySelector('.btn-spectate'); if(b) b.disabled = !ps.some(p=>p.alive);
         }
 
+        // --- HELPER TO GET ITEM SVG ---
+        function getItemSVG(type) {
+            // Using numeric IDs from server (4=Cherry, 7=Strawberry...)
+            if (type == 4) return `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="18" r="6" fill="#ff0000"/><path d="M15,18 Q20,10 22,8" stroke="#00ff00" stroke-width="2" fill="none"/></svg>`;
+            if (type == 7) return `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M8,10 L22,10 L15,22 Z" fill="#de0000"/><path d="M8,10 L15,5 L22,10" fill="#00ff00"/><rect x="12" y="12" width="2" height="2" fill="#fff"/><rect x="16" y="14" width="2" height="2" fill="#fff"/></svg>`;
+            if (type == 8) return `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="16" r="7" fill="#ffae00"/><path d="M15,9 Q18,9 20,12 L15,12 Z" fill="#00ff00"/></svg>`;
+            if (type == 9) return `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="16" r="7" fill="#ff0000"/><path d="M15,9 L15,6" stroke="#00ff00" stroke-width="2"/></svg>`;
+            if (type == 10) return `<svg viewBox="0 0 30 30" class="icon-svg"><ellipse cx="15" cy="16" rx="7" ry="9" fill="#00ff00"/><ellipse cx="13" cy="14" rx="2" ry="4" transform="rotate(-10 13 14)" fill="#ccffcc"/></svg>`;
+            if (type == 11) return `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,8 L22,18 L8,18 Z" fill="#ffff00"/><path d="M8,8 L8,18 L15,22 L22,18 L22,8 Z" fill="#0000ff"/></svg>`;
+            if (type == 12) return `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,8 Q22,8 22,20 L8,20 Q8,8 15,8 Z" fill="#ffff00"/><ellipse cx="15" cy="18" rx="2" ry="4" fill="#000"/></svg>`;
+            if (type == 13) return `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,8 L15,22" stroke="#00ffff" stroke-width="3"/><circle cx="15" cy="8" r="4" stroke="#00ffff" stroke-width="1" fill="none"/><path d="M15,16 L20,16 M15,20 L20,20" stroke="#00ffff" stroke-width="1"/></svg>`;
+            return "";
+        }
+
         socket.on('gameOver', data => { 
             document.getElementById('game-over').classList.add('visible'); document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
             isJoined = false; isSpectating = true; hideSpectatorBtn(); document.getElementById('mute-btn').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'none';
+            
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#FF0000"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
-            const cherrySVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="18" r="6" fill="#ff0000"/><path d="M15,18 Q20,10 22,8" stroke="#00ff00" stroke-width="2" fill="none"/></svg>`;
-            document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherrySVG}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
+            
+            // GENERATE STATS HTML DYNAMICALLY
+            let statsHtml = "";
+            
+            // 1. Standard stats (always shown if > 0 or preferred)
+            if (data.stats.ghosts > 0) statsHtml += `<div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div>`;
+            if (data.stats.players > 0) statsHtml += `<div class="stat-item">${pacSVG}x${data.stats.players}</div>`;
+            if (data.stats.evil > 0) statsHtml += `<div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
+
+            // 2. Loop through collected items (Fruits)
+            // data.items is { "4": 2, "7": 1, ... } where keys are TILE IDs
+            if (data.items) {
+                // Sort by ID to keep consistent order
+                const keys = Object.keys(data.items).sort((a,b) => parseInt(a) - parseInt(b));
+                for (const key of keys) {
+                    const count = data.items[key];
+                    if (count > 0) {
+                        const svg = getItemSVG(key);
+                        if (svg) {
+                            statsHtml += `<div class="stat-item">${svg}x${count}</div>`;
+                        }
+                    }
+                }
+            }
+
+            document.getElementById('match-stats-container').innerHTML = statsHtml;
+            
             const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
             const btnText = data.allDead ? 'PLAY AGAIN' : 'WAITING...';
             document.getElementById('go-buttons').innerHTML = `<button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!data.leaderboard.some(p=>p.alive)?'disabled':''}>SPECTATE</button><button id="btn-replay" class="btn-play-again" onclick="returnToLobby()" ${btnState}>${btnText}</button><button class="btn-main-menu" onclick="location.reload()">MAIN MENU</button>`;
@@ -457,9 +491,10 @@
                         if (localRows[y-1] && localRows[y-1][x] === 1) ctx.fillRect(sx + 4, sy - 4, TILE_SIZE - 8, 8);
                     } else if (t === 2) { ctx.fillStyle = '#ffb8ae'; ctx.fillRect(sx+13, sy+13, 4, 4);
                     } else if (t === 3) { ctx.fillStyle = (now%400 < 200) ? '#fff' : '#ffb8ae'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
-                    } else if (t === 4) { ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
-                    } else if (t === 5) { ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
-                    } else if (t === 6) { ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(sx+15, sy+10); ctx.bezierCurveTo(sx+15, sy+8, sx+12, sy+5, sx+8, sy+5); ctx.bezierCurveTo(sx+2, sy+5, sx+2, sy+14, sx+15, sy+22); ctx.bezierCurveTo(sx+28, sy+14, sx+28, sy+5, sx+22, sy+5); ctx.bezierCurveTo(sx+18, sy+5, sx+15, sy+8, sx+15, sy+10); ctx.fill(); }
+                    } else if (t === 4) { drawItem(ctx, t, sx, sy); }
+                    else if (t === 5) { drawItem(ctx, t, sx, sy); }
+                    else if (t === 6) { drawItem(ctx, t, sx, sy); }
+                    else if (t >= 7 && t <= 13) { drawItem(ctx, t, sx, sy); }
                 }
             }
 
@@ -528,6 +563,42 @@
                 for(let i=-1; i<22; i++) { const chaosX = Math.sin(now/200 + i + rowIndex) * 3; const chaosY = Math.cos(now/200 + i * 0.5 + rowIndex) * 3; const seed = (i * 137) + (rowIndex * 149); const rnd = Math.abs(Math.sin(seed) * 10000); const colorIndex = Math.floor(rnd) % 4; drawGhost(ctx, i*30 + chaosX, gy + chaosY, gc[colorIndex], 0, -1, 0); }
             }
             ctx.restore(); 
+        }
+
+        function drawItem(ctx, type, sx, sy) {
+            if (type === 4) { // CHERRY
+                ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill(); 
+                ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
+            } else if (type === 5) { // EVIL
+                ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); 
+                ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); 
+                ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
+            } else if (type === 6) { // HEART
+                ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(sx+15, sy+10); ctx.bezierCurveTo(sx+15, sy+8, sx+12, sy+5, sx+8, sy+5); ctx.bezierCurveTo(sx+2, sy+5, sx+2, sy+14, sx+15, sy+22); ctx.bezierCurveTo(sx+28, sy+14, sx+28, sy+5, sx+22, sy+5); ctx.bezierCurveTo(sx+18, sy+5, sx+15, sy+8, sx+15, sy+10); ctx.fill(); 
+            } else if (type === 7) { // STRAWBERRY
+                ctx.fillStyle = '#de0000'; ctx.beginPath(); ctx.moveTo(sx+8, sy+10); ctx.lineTo(sx+22, sy+10); ctx.lineTo(sx+15, sy+22); ctx.fill();
+                ctx.fillStyle = '#00ff00'; ctx.beginPath(); ctx.moveTo(sx+8, sy+10); ctx.lineTo(sx+15, sy+5); ctx.lineTo(sx+22, sy+10); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.fillRect(sx+12, sy+12, 2, 2); ctx.fillRect(sx+16, sy+14, 2, 2);
+            } else if (type === 8) { // ORANGE
+                ctx.fillStyle = '#ffae00'; ctx.beginPath(); ctx.arc(sx+15, sy+16, 7, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#00ff00'; ctx.beginPath(); ctx.moveTo(sx+15, sy+9); ctx.quadraticCurveTo(sx+18, sy+9, sx+20, sy+12); ctx.lineTo(sx+15, sy+12); ctx.fill();
+            } else if (type === 9) { // APPLE
+                ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+16, 7, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+9); ctx.lineTo(sx+15, sy+6); ctx.stroke();
+            } else if (type === 10) { // MELON
+                ctx.fillStyle = '#00ff00'; ctx.beginPath(); ctx.ellipse(sx+15, sy+16, 7, 9, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ccffcc'; ctx.beginPath(); ctx.ellipse(sx+13, sy+14, 2, 4, -0.2, 0, Math.PI*2); ctx.fill();
+            } else if (type === 11) { // GALAXIAN
+                ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.moveTo(sx+15, sy+8); ctx.lineTo(sx+22, sy+18); ctx.lineTo(sx+8, sy+18); ctx.fill();
+                ctx.fillStyle = '#0000ff'; ctx.beginPath(); ctx.moveTo(sx+8, sy+8); ctx.lineTo(sx+8, sy+18); ctx.lineTo(sx+15, sy+22); ctx.lineTo(sx+22, sy+18); ctx.lineTo(sx+22, sy+8); ctx.fill();
+            } else if (type === 12) { // BELL
+                ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.moveTo(sx+15, sy+8); ctx.quadraticCurveTo(sx+22, sy+8, sx+22, sy+20); ctx.lineTo(sx+8, sy+20); ctx.quadraticCurveTo(sx+8, sy+8, sx+15, sy+8); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx+15, sy+18, 2, 4, 0, 0, Math.PI*2); ctx.fill();
+            } else if (type === 13) { // KEY
+                ctx.strokeStyle = '#00ffff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(sx+15, sy+8); ctx.lineTo(sx+15, sy+22); ctx.stroke();
+                ctx.beginPath(); ctx.arc(sx+15, sy+8, 4, 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(sx+15, sy+16); ctx.lineTo(sx+20, sy+16); ctx.moveTo(sx+15, sy+20); ctx.lineTo(sx+20, sy+20); ctx.stroke();
+            }
         }
 
         function drawWorldSignal(ctx, worldY, camY, state, time) {
