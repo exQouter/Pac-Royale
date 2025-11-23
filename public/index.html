@@ -6,37 +6,73 @@
     <title>Pac-Royale Battle</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
+        /* BASE STYLES & LAYOUT */
         body { 
             margin: 0; background: #050505; color: white; font-family: 'Press Start 2P'; 
-            display: flex; flex-direction: row; align-items: flex-start; justify-content: center; 
+            /* Flex layout to center content */
+            display: flex; flex-direction: row; justify-content: center; align-items: flex-start;
             height: 100vh; width: 100vw; overflow: hidden; 
             user-select: none; touch-action: none; overscroll-behavior: none; position: fixed;
+            padding-top: 40px; box-sizing: border-box;
         }
+
+        /* --- DESKTOP LAYOUT --- */
         
-        .ui-column { display: flex; flex-direction: column; gap: 20px; justify-content: flex-start; height: 100%; margin: 0 15px; padding-top: 40px; }
-        
+        /* Fixed Aspect Ratio Canvas */
+        canvas { 
+            border: 6px solid #1919A6; background: black; image-rendering: pixelated; 
+            box-shadow: 0 0 40px rgba(25,25,166,0.4); 
+            display: none; /* Hidden until game starts */
+            
+            /* Strict Aspect Ratio Logic */
+            height: auto;
+            width: auto;
+            max-width: 100%;
+            max-height: calc(100vh - 60px);
+            aspect-ratio: 3/4; /* Keeps it 600x800 */
+            object-fit: contain;
+            
+            position: relative; z-index: 10;
+        }
+
+        /* UI Wrapper - Hidden by default */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+            display: none; /* TASK 2: Hidden in menu */
+            justify-content: center;
+        }
+
+        /* Desktop Side Panels */
         .side-panel { 
-            width: 120px; height: 160px; background: #000; border: 4px solid var(--p-color); 
+            width: 140px; /* TASK 5: Restored Width */
+            height: 160px; 
+            background: #000; border: 4px solid var(--p-color); 
             padding: 10px; display: flex; flex-direction: column; align-items: center; 
             justify-content: center; text-align: center; opacity: 0.3; 
             transition: opacity 0.3s, transform 0.2s, box-shadow 0.2s; 
-            box-shadow: 6px 6px 0px color-mix(in srgb, var(--p-color), black 50%); position: relative; 
+            box-shadow: 6px 6px 0px color-mix(in srgb, var(--p-color), black 50%); 
+            position: absolute; pointer-events: auto;
         }
         .side-panel.active { opacity: 1; transform: translate(-2px, -2px); box-shadow: 8px 8px 0px color-mix(in srgb, var(--p-color), black 50%); }
+
+        /* TASK 1: Positioning from Center + Spacing */
+        /* Center (50%) - Half Canvas (300px) - Gap (15px) - PanelWidth (168px incl border/pad) */
+        /* Note: Using Calc to pin them relative to the game board */
+        
+        #p0 { top: 40px;  left: calc(50% - 300px - 15px - 170px); }
+        #p2 { top: 230px; left: calc(50% - 300px - 15px - 170px); } /* Vertical gap */
+        
+        #p1 { top: 40px;  right: calc(50% - 300px - 15px - 170px); }
+        #p3 { top: 230px; right: calc(50% - 300px - 15px - 170px); }
+
         .pac-avatar { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 15px; background: conic-gradient(transparent 30deg, var(--p-color) 30deg 330deg, transparent 330deg); transform: rotate(90deg); border: none; box-shadow: none; }
         .pac-avatar::after { display: none; }
         .player-name-ui { font-size: 10px; margin-bottom: 10px; color: var(--p-color); text-transform: uppercase; font-weight: bold; letter-spacing: 1px; background: transparent; padding: 0; width: 100%; padding-bottom: 5px; text-shadow: 2px 2px 0px color-mix(in srgb, var(--p-color), black 60%); }
         .stat-label { font-size: 7px; color: #888; margin-top: 10px; margin-bottom: 5px; letter-spacing: 1px; }
         .score-box { font-size: 10px; color: #fff; }
         .lives-box { color: #ff3333; letter-spacing: 2px; font-size: 12px; margin-top: 5px; }
-        
-        canvas { 
-            border: 6px solid #1919A6; background: black; image-rendering: pixelated; 
-            box-shadow: 0 0 40px rgba(25,25,166,0.4); display: none; 
-            max-height: calc(100vh - 20px); width: 100%; max-width: 600px; aspect-ratio: 3/4;
-            margin-top: 20px;
-        }
 
+        /* SCREENS & MENUS */
         .screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: #000; padding: 40px; border: 4px solid #ffcc00; z-index: 100; min-width: 300px; max-width: 90%; box-shadow: 10px 10px 0px rgba(0,0,0,0.8); display: none; box-sizing: border-box; }
         .visible { display: block !important; }
         #countdown-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 100px; color: #ffcc00; text-shadow: 5px 5px 0 #000; z-index: 50; pointer-events: none; display: none; }
@@ -45,10 +81,12 @@
         button:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 #b8860b; }
         button:disabled { background: #555; color: #999; cursor: not-allowed; box-shadow: none; transform: none; border-color: #777; }
         input { background: #111; border: 2px solid #555; color: #ffcc00; font-family: inherit; padding: 15px; text-align: center; text-transform: uppercase; font-size: 16px; display: block; margin: 10px auto; width: 80%; box-sizing: border-box; }
+        
         .menu-grid { display: grid; grid-template-columns: 1fr 2px 1fr; gap: 20px; margin-top: 20px; align-items: stretch; } 
         .menu-col { display: flex; flex-direction: column; gap: 10px; justify-content: space-between; }
         .menu-divider { background: #333; height: 100%; min-height: 150px; }
         .menu-label { font-size: 10px; color: #888; margin-bottom: 5px; text-align: center; }
+        
         .lobby-container { display: flex; gap: 15px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
         .lobby-slot { width: 80px; height: 120px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
         .lobby-slot.filled { border-color: #fff; background: #111; }
@@ -85,59 +123,97 @@
         #mute-btn { position: fixed; bottom: 40px; right: 20px; background: transparent; color: #555; border: none; opacity: 0.5; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; padding: 0; display: none; z-index: 200; align-items: center; justify-content: center; outline: none; box-shadow: none;}
         #mute-btn:hover { color: white; opacity: 1; transform: scale(1.1); text-shadow: 0 0 5px #fff; }
 
-        /* --- MOBILE LAYOUT TRANSFORMATION --- */
+        /* --- MOBILE LAYOUT (TASK 4 - FIXED BORDER) --- */
         @media (max-width: 900px) {
             body { 
                 flex-direction: column; 
                 justify-content: flex-start;
-                padding-top: 5px;
+                align-items: stretch;
+                padding-top: 0;
             }
 
-            .ui-column { 
-                flex-direction: row; 
-                width: 100%; 
-                height: auto; 
-                padding: 0;
-                margin: 0;
-                justify-content: center;
-                gap: 5px;
-                order: 1; /* Place UI above canvas */
-            }
-
-            /* Adjust second column to follow */
-            .ui-column:nth-of-type(3) { order: 2; } 
-            
             canvas { 
-                order: 3; 
-                flex-grow: 1; 
-                margin-top: 5px; 
-                max-height: none; 
-                height: auto; 
-                border-width: 2px;
+                /* Отключаем растягивание, чтобы рамка облегала контент */
+                flex-grow: 0; 
+                
+                /* Разрешаем браузеру вычислять размеры на основе aspect-ratio */
+                width: auto;
+                height: auto;
+                
+                /* Ограничиваем максимальные размеры */
+                max-width: 100%; 
+                max-height: calc(100vh - 70px); 
+                
+                /* Центрирование */
+                margin: 5px auto;
+                
+                /* Явно задаем границу (как на ПК) */
+                border: 6px solid #1919A6;
+                box-sizing: border-box; /* Важно: рамка входит в размеры */
+                
+                order: 2; 
+            }
+
+            /* UI Layer - Single Row Top */
+            #ui-layer {
+                /* Display is toggled via JS, but if active, it's flex */
+                position: relative;
+                width: 100%;
+                height: 60px; 
+                background: #000;
+                border-bottom: 2px solid #333;
+                pointer-events: auto;
+                order: 1; 
+                flex-direction: row;
+                justify-content: space-evenly; 
+                align-items: center;
+                padding: 0;
             }
 
             .side-panel {
-                width: 50px;
-                height: 60px;
+                /* Reset Desktop Positioning */
+                position: relative;
+                top: auto !important; left: auto !important; right: auto !important;
+                width: 22%; 
+                height: 100%;
+                border: none;
+                border-bottom: 4px solid var(--p-color); 
+                box-shadow: none !important;
+                background: transparent;
                 padding: 2px;
-                border-width: 2px;
-                box-shadow: none;
+                order: var(--order); 
             }
-            .side-panel.active { transform: none; box-shadow: 0 0 5px var(--p-color); }
+            .side-panel.active { background: rgba(255,255,255,0.1); }
+
+            /* Compact content */
+            .pac-avatar { display: none; }
+            .stat-label { display: none; }
+            .player-name-ui { font-size: 8px; margin: 2px 0; }
+            .score-box { font-size: 9px; font-weight: bold; }
+            .lives-box { font-size: 8px; margin-top: 2px; }
+
+            #mute-btn { top: 70px; right: 10px; bottom: auto; width: 30px; height: 30px; font-size: 16px; background: rgba(0,0,0,0.5); border-radius: 4px; }
             
-            .pac-avatar { display: none; } /* Hide avatar to save space */
-            .player-name-ui { font-size: 8px; margin-bottom: 2px; }
-            .stat-label { display: none; } /* Hide labels "SCORE", "LIVES" */
-            .score-box { font-size: 8px; margin-bottom: 2px; }
-            .lives-box { font-size: 8px; letter-spacing: 0; }
-            
-            #mute-btn { top: 10px; right: 10px; bottom: auto; width: 30px; height: 30px; font-size: 16px; }
+            /* COMPACT MOBILE MENU */
+            .menu-grid { 
+                grid-template-columns: 1fr; /* Single column */
+                gap: 10px; 
+            }
+            .menu-divider { 
+                height: 1px; 
+                width: 100%; 
+                min-height: 1px; 
+            }
+            button { padding: 10px; font-size: 10px; margin-top: 5px; }
+            input { padding: 10px; font-size: 12px; }
+            h1 { font-size: 24px !important; margin-bottom: 20px !important; }
+            .screen { padding: 20px; }
         }
     </style>
 </head>
 <body>
     <div id="intro-screen" class="screen visible">
-        <h1 style="color:#ffcc00; font-size:36px; margin-bottom:40px; text-shadow: 4px 4px 0 #b8860b;">PAC-ROYALE</h1>
+        <h1 style="color:#ffcc00; margin-bottom:40px; text-shadow: 4px 4px 0 #b8860b;">PAC-ROYALE</h1>
         <p style="font-size:10px; color:#aaa; margin-bottom:20px;">ONLINE BATTLE</p>
         <button style="width: 200px; margin: 0 auto; display: block;" onclick="enterMenu()">PLAY</button>
         <button id="scoreboard-btn" onclick="toggleBoard(); uiClick()">🏆 SCOREBOARD</button>
@@ -175,16 +251,22 @@
     <div id="board-screen" class="screen"><h1 style="color:#ffcc00;">TOP 10</h1><table id="board-table" style="width:100%; color:#ccc; font-size:10px; margin-top:20px;"></table><button onclick="toggleBoard(); uiClick()">CLOSE</button></div>
     <div id="countdown-display">3</div>
     
-    <div class="ui-column">
-        <div class="side-panel" id="p0" style="--p-color:#FFFF00;"><div class="pac-avatar"></div><div class="player-name-ui" id="n0">P1</div><div class="stat-label">SCORE</div><div class="score-box" id="s0">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l0">❤️❤️❤️</div></div>
-        <div class="side-panel" id="p2" style="--p-color:#00FFFF;"><div class="pac-avatar"></div><div class="player-name-ui" id="n2">P3</div><div class="stat-label">SCORE</div><div class="score-box" id="s2">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l2">❤️❤️❤️</div></div>
-    </div>
-    
     <canvas id="gameCanvas" width="600" height="800"></canvas>
     
-    <div class="ui-column">
-        <div class="side-panel" id="p1" style="--p-color:#00FF00;"><div class="pac-avatar"></div><div class="player-name-ui" id="n1">P2</div><div class="stat-label">SCORE</div><div class="score-box" id="s1">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l1">❤️❤️❤️</div></div>
-        <div class="side-panel" id="p3" style="--p-color:#FF00FF;"><div class="pac-avatar"></div><div class="player-name-ui" id="n3">P4</div><div class="stat-label">SCORE</div><div class="score-box" id="s3">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l3">❤️❤️❤️</div></div>
+    <!-- Unified UI Layer -->
+    <div id="ui-layer">
+        <div class="side-panel" id="p0" style="--p-color:#FFFF00; --order:0;">
+            <div class="pac-avatar"></div><div class="player-name-ui" id="n0">P1</div><div class="stat-label">SCORE</div><div class="score-box" id="s0">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l0">❤️❤️❤️</div>
+        </div>
+        <div class="side-panel" id="p1" style="--p-color:#00FF00; --order:1;">
+            <div class="pac-avatar"></div><div class="player-name-ui" id="n1">P2</div><div class="stat-label">SCORE</div><div class="score-box" id="s1">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l1">❤️❤️❤️</div>
+        </div>
+        <div class="side-panel" id="p2" style="--p-color:#00FFFF; --order:2;">
+            <div class="pac-avatar"></div><div class="player-name-ui" id="n2">P3</div><div class="stat-label">SCORE</div><div class="score-box" id="s2">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l2">❤️❤️❤️</div>
+        </div>
+        <div class="side-panel" id="p3" style="--p-color:#FF00FF; --order:3;">
+            <div class="pac-avatar"></div><div class="player-name-ui" id="n3">P4</div><div class="stat-label">SCORE</div><div class="score-box" id="s3">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l3">❤️❤️❤️</div>
+        </div>
     </div>
     
     <button id="mute-btn" onclick="toggleMute()">🔊</button>
@@ -221,56 +303,25 @@
             document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
         };
 
-        // --- SWIPE CONTROL LOGIC ---
+        // SWIPE CONTROL
         let touchStartX = 0;
         let touchStartY = 0;
-
-        document.addEventListener('touchstart', function(e) {
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
-        }, {passive: false});
-
-        document.addEventListener('touchmove', function(e) {
-            e.preventDefault(); // Prevent scrolling
-        }, {passive: false});
-
-        document.addEventListener('touchend', function(e) {
-            const touchEndX = e.changedTouches[0].screenX;
-            const touchEndY = e.changedTouches[0].screenY;
-            handleSwipe(touchEndX, touchEndY);
-        }, {passive: false});
-
+        document.addEventListener('touchstart', function(e) { touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }, {passive: false});
+        document.addEventListener('touchmove', function(e) { e.preventDefault(); }, {passive: false});
+        document.addEventListener('touchend', function(e) { const touchEndX = e.changedTouches[0].screenX; const touchEndY = e.changedTouches[0].screenY; handleSwipe(touchEndX, touchEndY); }, {passive: false});
         function handleSwipe(endX, endY) {
             if(!isJoined) return;
             const diffX = endX - touchStartX;
             const diffY = endY - touchStartY;
             const threshold = 30; 
-
-            if (Math.abs(diffX) > Math.abs(diffY)) {
-                if (Math.abs(diffX) > threshold) {
-                    sendInput({x: diffX > 0 ? 1 : -1, y: 0});
-                }
-            } else {
-                if (Math.abs(diffY) > threshold) {
-                    sendInput({x: 0, y: diffY > 0 ? 1 : -1});
-                }
-            }
+            if (Math.abs(diffX) > Math.abs(diffY)) { if (Math.abs(diffX) > threshold) sendInput({x: diffX > 0 ? 1 : -1, y: 0}); } 
+            else { if (Math.abs(diffY) > threshold) sendInput({x: 0, y: diffY > 0 ? 1 : -1}); }
         }
 
-        if(urlParams.has('code')) {
-            document.getElementById('lobby-code-input').value = urlParams.get('code');
-            document.getElementById('intro-screen').classList.remove('visible');
-            document.getElementById('menu-screen').classList.add('visible');
-        }
+        if(urlParams.has('code')) { document.getElementById('lobby-code-input').value = urlParams.get('code'); document.getElementById('intro-screen').classList.remove('visible'); document.getElementById('menu-screen').classList.add('visible'); }
 
         class PacmanSynth {
-            constructor() { 
-                this.ctx = new (window.AudioContext||window.webkitAudioContext)(); 
-                this.masterGain = this.ctx.createGain(); 
-                this.masterGain.gain.value = 0.15; 
-                this.masterGain.connect(this.ctx.destination); 
-                this.isMuted = false; this.sirenOsc = null; 
-            }
+            constructor() { this.ctx = new (window.AudioContext||window.webkitAudioContext)(); this.masterGain = this.ctx.createGain(); this.masterGain.gain.value = 0.15; this.masterGain.connect(this.ctx.destination); this.isMuted = false; this.sirenOsc = null; }
             resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
             toggleMute() { this.isMuted = !this.isMuted; this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.15, this.ctx.currentTime); return this.isMuted; }
             createSoftOsc(type, freq, t) { if(this.isMuted) return {osc:{start:()=>{},stop:()=>{},connect:()=>{}}, gain:{gain:{setValueAtTime:()=>{},exponentialRampToValueAtTime:()=>{},linearRampToValueAtTime:()=>{}}}}; const o=this.ctx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1000; const g=this.ctx.createGain(); o.connect(f); f.connect(g); g.connect(this.masterGain); return {osc:o, gain:g}; }
@@ -315,12 +366,31 @@
         function hideSpectatorBtn() { document.getElementById('spectator-menu-btn').style.display = 'none'; }
         function returnToLobby() { socket.emit('returnToLobby'); uiClick(); }
 
-        socket.on('lobbyUpdate', d => { hideSpectatorBtn(); document.getElementById('game-over').classList.remove('visible'); document.getElementById('menu-screen').classList.remove('visible'); document.getElementById('lobby-screen').classList.add('visible'); canvas.style.display = 'none'; document.getElementById('mute-btn').style.display = 'none'; document.getElementById('lobby-code-display').innerText = `CODE: ${d.roomId}`; renderLobbySlots(d.players); if(socket.id === d.hostId) { document.getElementById('start-game-btn').style.display = 'block'; document.getElementById('waiting-msg').style.display = 'none'; } else { document.getElementById('start-game-btn').style.display = 'none'; document.getElementById('waiting-msg').style.display = 'block'; } });
+        socket.on('lobbyUpdate', d => { 
+            hideSpectatorBtn(); 
+            // TASK 2: Hide UI in lobby
+            document.getElementById('ui-layer').style.display = 'none'; 
+            
+            document.getElementById('game-over').classList.remove('visible'); 
+            document.getElementById('menu-screen').classList.remove('visible'); 
+            document.getElementById('lobby-screen').classList.add('visible'); 
+            canvas.style.display = 'none'; 
+            document.getElementById('mute-btn').style.display = 'none'; 
+            document.getElementById('lobby-code-display').innerText = `CODE: ${d.roomId}`; 
+            renderLobbySlots(d.players); 
+            if(socket.id === d.hostId) { document.getElementById('start-game-btn').style.display = 'block'; document.getElementById('waiting-msg').style.display = 'none'; } 
+            else { document.getElementById('start-game-btn').style.display = 'none'; document.getElementById('waiting-msg').style.display = 'block'; } 
+        });
+        
         socket.on('errorMsg', msg => showErr(msg));
         socket.on('roomClosed', () => { hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); document.getElementById('host-left-screen').classList.add('visible'); synth.stopSiren(); });
         
         socket.on('gameStarted', () => { 
             hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); 
+            
+            // TASK 2: Show UI when game starts
+            document.getElementById('ui-layer').style.display = 'flex';
+            
             canvas.style.display = 'block'; document.getElementById('mute-btn').style.display = 'flex'; 
             isJoined = true; isSpectating = false; synth.resume(); synth.playIntro(); 
             setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 4000); 
@@ -343,6 +413,9 @@
         socket.on('gameOver', data => { 
             document.getElementById('game-over').classList.add('visible'); document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
             isJoined = false; isSpectating = true; hideSpectatorBtn(); document.getElementById('mute-btn').style.display = 'none';
+            // Hide UI on game over
+            document.getElementById('ui-layer').style.display = 'none';
+
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#9900ff"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
@@ -362,7 +435,7 @@
             if(e) e.preventDefault();
             if(!isJoined) return;
             const now = Date.now();
-            if (now - lastInputTime < 50) return; // Debounce 50ms
+            if (now - lastInputTime < 50) return; 
             lastInputTime = now;
             socket.emit('input', d);
         }

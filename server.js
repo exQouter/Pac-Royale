@@ -16,7 +16,7 @@ const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
 const PLAYER_COLORS = ['#FFFF00', '#00FF00', '#BF00FF', '#0055FF'];
 
-// Физика и скорость
+// Физика
 const CAM_SPEED_START = 0.8;
 const CAM_SPEED_MAX   = 3.0;
 const CAM_ACCEL       = 0.000122; 
@@ -505,7 +505,6 @@ function updateGamePhysics(game) {
 function loseLife(game, p) {
     if (p.deathTimer > 0) return; 
     p.deathTimer = DEATH_ANIMATION_FRAMES; p.vx = 0; p.vy = 0; io.to(game.id).emit('sfx', 'death');
-    // Removed particle emission
 }
 
 function finalizeDeath(game, p) {
