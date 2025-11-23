@@ -240,14 +240,22 @@
         if(urlParams.has('code')) { document.getElementById('lobby-code-input').value = urlParams.get('code'); document.getElementById('intro-screen').classList.remove('visible'); document.getElementById('menu-screen').classList.add('visible'); }
 
         class PacmanSynth {
-            constructor() { this.ctx = new (window.AudioContext||window.webkitAudioContext)(); this.masterGain = this.ctx.createGain(); this.masterGain.gain.value = 0.15; this.masterGain.connect(this.ctx.destination); this.isMuted = false; this.sirenOsc = null; }
+            constructor() { 
+                this.ctx = new (window.AudioContext||window.webkitAudioContext)(); 
+                this.masterGain = this.ctx.createGain(); 
+                this.masterGain.gain.value = 0.15; 
+                this.masterGain.connect(this.ctx.destination); 
+                this.isMuted = false; 
+                this.sirenOsc = null;
+                this.evilInterval = null; 
+            }
             resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
             toggleMute() { this.isMuted = !this.isMuted; this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.15, this.ctx.currentTime); return this.isMuted; }
             createSoftOsc(type, freq, t) { if(this.isMuted) return {osc:{start:()=>{},stop:()=>{},connect:()=>{}}, gain:{gain:{setValueAtTime:()=>{},exponentialRampToValueAtTime:()=>{},linearRampToValueAtTime:()=>{}}}}; const o=this.ctx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1000; const g=this.ctx.createGain(); o.connect(f); f.connect(g); g.connect(this.masterGain); return {osc:o, gain:g}; }
             playClick() { if(this.isMuted) return; const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',800,t); gain.gain.setValueAtTime(0.1,t); gain.gain.exponentialRampToValueAtTime(0.01,t+0.1); osc.start(t); osc.stop(t+0.1); }
             playWaka() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.linearRampToValueAtTime(50,t+0.15); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.8,t+0.02); g.gain.linearRampToValueAtTime(0,t+0.15); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+0.15); }
             playEat() { if(this.isMuted) return; const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',300,t); osc.frequency.exponentialRampToValueAtTime(50,t+0.1); gain.gain.setValueAtTime(0.3,t); gain.gain.linearRampToValueAtTime(0,t+0.1); osc.start(t); osc.stop(t+0.1); }
-            playDeath() { if(this.isMuted) return; this.stopSiren(); const t=this.ctx.currentTime; for(let i=0;i<8;i++){ const {osc,gain}=this.createSoftOsc('triangle',300-i*30,t+i*0.1); osc.frequency.linearRampToValueAtTime(50,t+i*0.1+0.1); gain.gain.setValueAtTime(0.3,t+i*0.1); gain.gain.linearRampToValueAtTime(0,t+i*0.1+0.1); osc.start(t+i*0.1); osc.stop(t+i*0.1+0.1); } }
+            playDeath() { if(this.isMuted) return; this.stopSiren(); this.stopEvilTheme(); const t=this.ctx.currentTime; for(let i=0;i<8;i++){ const {osc,gain}=this.createSoftOsc('triangle',300-i*30,t+i*0.1); osc.frequency.linearRampToValueAtTime(50,t+i*0.1+0.1); gain.gain.setValueAtTime(0.3,t+i*0.1); gain.gain.linearRampToValueAtTime(0,t+i*0.1+0.1); osc.start(t+i*0.1); osc.stop(t+i*0.1+0.1); } }
             playIntro() { if(this.isMuted) return; const t=this.ctx.currentTime, notes=[246,493,369,311,493,369,311,493,369,311,246]; let time=t; notes.forEach(f=>{ const {osc,gain}=this.createSoftOsc('triangle',f,time); gain.gain.setValueAtTime(0.2,time); gain.gain.linearRampToValueAtTime(0,time+0.08); osc.start(time); osc.stop(time+0.1); time+=0.12; }); }
             startSiren(type) { if(this.isMuted || this.sirenOsc) return; const t=this.ctx.currentTime; this.sirenOsc=this.ctx.createOscillator(); this.sirenOsc.type=type==='power'?'triangle':'sine'; this.sirenOsc.frequency.setValueAtTime(type==='power'?300:150,t); const lfo=this.ctx.createOscillator(); lfo.frequency.value=type==='power'?5:1.5; const lg=this.ctx.createGain(); lg.gain.value=20; lfo.connect(lg); lg.connect(this.sirenOsc.frequency); lfo.start(t); const mg=this.ctx.createGain(); mg.gain.value=0.1; this.sirenOsc.connect(mg); mg.connect(this.masterGain); this.sirenOsc.start(t); this.sirenLFO=lfo; this.currentSirenType=type; }
             stopSiren() { if(this.sirenOsc){ try{this.sirenOsc.stop(); if(this.sirenLFO)this.sirenLFO.stop();}catch(e){} this.sirenOsc=null; } this.currentSirenType=null; }
@@ -255,9 +263,86 @@
             playWarning() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(600,t); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.05); g.gain.setValueAtTime(0.15,t+0.3); g.gain.linearRampToValueAtTime(0,t+0.35); g.gain.linearRampToValueAtTime(0.15,t+0.7); g.gain.setValueAtTime(0.15,t+0.95); g.gain.linearRampToValueAtTime(0,t+1.0); g.gain.linearRampToValueAtTime(0.15,t+1.35); g.gain.setValueAtTime(0.15,t+1.6); g.gain.linearRampToValueAtTime(0,t+1.65); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+1.7); }
             playRocket() { if(this.isMuted) return; const t=this.ctx.currentTime; const noise=this.ctx.createBufferSource(); noise.buffer=this.createNoiseBuffer(); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(800,t); f.frequency.exponentialRampToValueAtTime(100,t+1.0); const g=this.ctx.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.01,t+1.0); noise.connect(f); f.connect(g); g.connect(this.masterGain); noise.start(t); }
             playTrainBell() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(800,t); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.1,t+0.05); g.gain.linearRampToValueAtTime(0,t+0.2); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+0.3); }
-            playTrainRumble() { if(this.isMuted) return; const t=this.ctx.currentTime; const bufferSize=this.ctx.sampleRate*2.0; const buffer=this.ctx.createBuffer(1,bufferSize,this.ctx.sampleRate); const data=buffer.getChannelData(0); for(let i=0;i<bufferSize;i++)data[i]=Math.random()*2-1; const noise=this.ctx.createBufferSource(); noise.buffer=buffer; const filter=this.ctx.createBiquadFilter(); filter.type='lowpass'; filter.frequency.setValueAtTime(120,t); const gain=this.ctx.createGain(); gain.gain.setValueAtTime(0,t); gain.gain.linearRampToValueAtTime(0.8,t+0.5); gain.gain.setValueAtTime(0.8,t+1.5); gain.gain.linearRampToValueAtTime(0,t+2.0); noise.connect(filter); filter.connect(gain); gain.connect(this.masterGain); noise.start(t); }
+            
+            // --- NEW SOUNDS ---
+            
+            // Train Rumble (Low frequency noise)
+            playTrainRumble() {
+                if (this.isMuted) return;
+                const t = this.ctx.currentTime;
+                const bufferSize = this.ctx.sampleRate * 4.0; // 4 seconds of noise
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                // Lowpass filter for rumble
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(100, t);
+                filter.frequency.linearRampToValueAtTime(80, t + 4.0);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.8, t + 0.5); // Fade in
+                gain.gain.setValueAtTime(0.8, t + 3.0);
+                gain.gain.linearRampToValueAtTime(0, t + 4.0); // Fade out
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.masterGain);
+                noise.start(t);
+            }
+
+            // Jaws Theme (Evil Mode)
+            startEvilTheme() {
+                if (this.isMuted || this.evilInterval) return;
+                this.stopSiren(); // Stop standard waka siren
+                let note = 0;
+                const playStep = () => {
+                    if (this.isMuted) return;
+                    // Alternating E (82.41 Hz) and F (87.31 Hz) roughly
+                    const freq = note % 2 === 0 ? 73.42 : 77.78; // D and D# (Low)
+                    this.playEvilNote(freq);
+                    note++;
+                };
+                playStep();
+                this.evilInterval = setInterval(playStep, 800); // Slow pace
+            }
+
+            stopEvilTheme() {
+                if (this.evilInterval) {
+                    clearInterval(this.evilInterval);
+                    this.evilInterval = null;
+                }
+            }
+
+            playEvilNote(freq) {
+                const t = this.ctx.currentTime;
+                const o = this.ctx.createOscillator();
+                o.type = 'sawtooth';
+                o.frequency.setValueAtTime(freq, t);
+
+                const f = this.ctx.createBiquadFilter();
+                f.type = 'lowpass';
+                f.frequency.value = 200; // Muffled sound
+
+                const g = this.ctx.createGain();
+                g.gain.setValueAtTime(0, t);
+                g.gain.linearRampToValueAtTime(0.4, t + 0.1);
+                g.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+
+                o.connect(f);
+                f.connect(g);
+                g.connect(this.masterGain);
+                o.start(t);
+                o.stop(t + 0.7);
+            }
+
             createNoiseBuffer() { const b = this.ctx.createBuffer(1, this.ctx.sampleRate*1.5, this.ctx.sampleRate); const d = b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
-            stopAll() { this.stopSiren(); if(this.ctx.state==='running') this.ctx.suspend(); }
+            stopAll() { this.stopSiren(); this.stopEvilTheme(); if(this.ctx.state==='running') this.ctx.suspend(); }
         }
         const synth = new PacmanSynth();
 
@@ -401,7 +486,23 @@
 
             const cdEl = document.getElementById('countdown-display');
             if (s.cd > 0) { cdEl.style.display = 'block'; cdEl.innerText = Math.ceil(s.cd); } else if (s.cd > -1) { cdEl.style.display = 'block'; cdEl.innerText = "GO!"; } else { cdEl.style.display = 'none'; }
-            if (now - (s.st || 0) > 4000 || s.cd < 0) { if(s.ft > 0) synth.checkSirenUpdate('power'); else synth.checkSirenUpdate('normal'); }
+            
+            // --- AUDIO LOGIC UPDATES ---
+            // Check for Evil Mode (PvP)
+            if (s.players && s.players[socket.id]) {
+                const myP = s.players[socket.id];
+                if (myP.pvpTimer > 0) {
+                    synth.startEvilTheme();
+                } else {
+                    synth.stopEvilTheme();
+                    // Resume normal siren if not in countdown
+                    if (now - (s.st || 0) > 4000 || s.cd < 0) { 
+                        if(s.ft > 0) synth.checkSirenUpdate('power'); 
+                        else synth.checkSirenUpdate('normal'); 
+                    }
+                }
+            }
+            // ---------------------------
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const startRow = Math.floor(visualCamY / TILE_SIZE) - 2;
