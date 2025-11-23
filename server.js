@@ -43,6 +43,14 @@ const SURGE_RISE_TIME = 600;
 const SURGE_RETURN_TIME = 180;
 const SURGE_MAX_HEIGHT = 240;
 
+// Настройки поезда
+const TRAIN_MIN_PATTERNS = 10;
+const TRAIN_MAX_PATTERNS = 30;
+const TRAIN_YELLOW_TIME = 180; // 3 секунды
+const TRAIN_RED_TIME = 60;     // 1 секунда
+const TRAIN_SPEED = 12.0;      // Очень быстро
+const TRAIN_LENGTH = 40;       // Длинный состав
+
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
 const lobbies = {};
 
@@ -104,7 +112,19 @@ function createGame(roomId) {
         changes: { removedDots: [], newRows: {} },
         speedBoostTimer: 0, globalThreshold: 0, frameCounter: 0,
         rocketState: { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] },
-        surge: { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) }
+        surge: { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) },
+        
+        // Train Logic
+        patternsSinceTrain: 0,
+        nextTrainLimit: TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS)),
+        trainGapRows: 0, 
+        train: {
+            state: 'OFF', // OFF, WAITING, YELLOW, RED, CROSSING
+            targetY: 0,
+            timer: 0,
+            dir: 1,
+            ghosts: [] 
+        }
     };
     initMap(game);
     return game;
@@ -115,6 +135,10 @@ function initMap(game) {
     game.cameraY = 0;
     game.patternRowIndex = 0;
     game.currentPattern = null;
+    game.train.state = 'OFF';
+    game.patternsSinceTrain = 0;
+    game.trainGapRows = 0;
+    
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
     game.changes = { removedDots: [], newRows: {} };
@@ -131,6 +155,11 @@ function resetGame(game) {
     game.frameCounter = 0;
     game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
     game.surge = { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) };
+    game.train = { state: 'OFF', targetY: 0, timer: 0, dir: 1, ghosts: [] };
+    game.patternsSinceTrain = 0;
+    game.trainGapRows = 0;
+    game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
+
     initMap(game);
     const pIds = Object.keys(game.players);
     for (const pid of pIds) {
@@ -147,10 +176,50 @@ function resetGame(game) {
 }
 
 function generateRow(game, yIndex) {
+    // Генерация разрыва для поезда
+    if (game.trainGapRows > 0) {
+        const row = new Array(MAP_WIDTH).fill(TILE.EMPTY);
+        row[0] = TILE.WALL;
+        row[MAP_WIDTH - 1] = TILE.WALL;
+        
+        game.rows[yIndex] = row;
+        if (!game.changes.newRows) game.changes.newRows = {};
+        game.changes.newRows[yIndex] = row;
+
+        // Если это середина разрыва (разрыв 5 строк, середина - 3-я по счету генерации)
+        // 5 (верх), 4, 3 (центр), 2, 1 (низ)
+        if (game.trainGapRows === 3) {
+            game.train.state = 'WAITING';
+            // targetY - центр путей
+            game.train.targetY = yIndex * TILE_SIZE;
+            game.train.dir = Math.random() > 0.5 ? 1 : -1;
+            game.train.ghosts = [];
+        }
+
+        game.trainGapRows--;
+        
+        const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 50;
+        const keys = Object.keys(game.rows);
+        if (keys.length > 150) { for (const k of keys) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; } }
+        return; 
+    }
+
     if (!game.currentPattern || game.patternRowIndex >= 10) {
+        game.patternsSinceTrain++;
+        
+        if (game.patternsSinceTrain >= game.nextTrainLimit) {
+            // Разрыв 5 строк: 3 для поезда + буферы
+            game.trainGapRows = 5; 
+            game.patternsSinceTrain = 0;
+            game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
+            generateRow(game, yIndex);
+            return;
+        }
+
         game.currentPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
         game.patternRowIndex = 0;
     }
+    
     const half = game.currentPattern[9 - game.patternRowIndex];
     game.patternRowIndex++;
     const row = new Array(MAP_WIDTH);
@@ -291,7 +360,7 @@ setInterval(() => {
             if (tickCount % 2 === 0) {
                 io.to(roomId).emit('state', { 
                     t: Date.now(), cd: game.countdown, players: game.players, camY: game.cameraY, 
-                    rockets: [], warnings: [], ghosts: [], surgeHeight: 0
+                    rockets: [], warnings: [], ghosts: [], surgeHeight: 0, train: game.train
                 });
             }
             continue;
@@ -316,6 +385,13 @@ setInterval(() => {
                 x: Math.round(g.x), y: Math.round(g.y),
                 color: g.color, vx: g.vx, vy: g.vy, dead: g.dead
             }));
+            
+            const trainData = {
+                state: game.train.state,
+                targetY: game.train.targetY,
+                ghosts: game.train.ghosts.map(g => ({ x: Math.round(g.x), y: Math.round(g.y), color: g.color, vx: g.vx }))
+            };
+
             const s = { 
                 t: Date.now(), 
                 camY: Math.round(game.cameraY * 100) / 100, 
@@ -323,7 +399,8 @@ setInterval(() => {
                 ft: game.frightenedTimer, st: game.startTime, 
                 changes: game.changes, sbt: game.speedBoostTimer,
                 rockets: game.rocketState.rockets, warnings: game.rocketState.warnings,
-                surgeHeight: Math.round(game.surge.currentHeight)
+                surgeHeight: Math.round(game.surge.currentHeight),
+                train: trainData
             };
             io.to(roomId).emit('state', s);
             game.changes = { removedDots: [], newRows: {} };
@@ -377,6 +454,85 @@ function handleSurgeLogic(game) {
     }
 }
 
+function handleTrainLogic(game) {
+    const t = game.train;
+    if (t.state === 'OFF') return;
+
+    // ЛОГИКА ТАЙМИНГА
+    // t.targetY - это координата Y путей на карте (фиксированная).
+    // game.cameraY - это координата Y верха экрана камеры (уменьшается со временем).
+    // screenY - это где пути находятся визуально на экране в данный момент.
+    // Если screenY = 0, пути на самом верху. Если screenY = 800, они внизу.
+    const screenY = t.targetY - game.cameraY;
+
+    if (t.state === 'WAITING') {
+        // Запускаем последовательность, только когда пути уже на экране (> 100px от верха)
+        if (screenY > 100 && screenY < 900) {
+            t.state = 'YELLOW';
+            t.timer = TRAIN_YELLOW_TIME;
+            io.to(game.id).emit('sfx', 'trainBell'); 
+        }
+    }
+    else if (t.state === 'YELLOW') {
+        t.timer--;
+        if (t.timer <= 0) {
+            t.state = 'RED';
+            t.timer = TRAIN_RED_TIME;
+        }
+    }
+    else if (t.state === 'RED') {
+        t.timer--;
+        if (t.timer <= 0) {
+            t.state = 'CROSSING';
+            // СПАВН ТРОЙНОГО ПОЕЗДА
+            const ghostCount = TRAIN_LENGTH; 
+            const colors = ['red','pink','cyan','orange'];
+            const startX = t.dir === 1 ? -150 : (MAP_WIDTH * TILE_SIZE + 150);
+            
+            // Занимаем targetY (центр), targetY + 30 (ниже), targetY - 30 (выше)
+            const offsets = [-TILE_SIZE, 0, TILE_SIZE];
+
+            for (let rowOffset of offsets) {
+                const yPos = t.targetY + rowOffset;
+                
+                for(let i=0; i<ghostCount; i++) {
+                    t.ghosts.push({
+                        x: startX - (i * 35 * t.dir), 
+                        y: yPos,
+                        color: colors[(i + Math.abs(rowOffset)) % 4], 
+                        vx: t.dir * TRAIN_SPEED
+                    });
+                }
+            }
+            io.to(game.id).emit('sfx', 'trainRumble'); 
+        }
+    }
+    else if (t.state === 'CROSSING') {
+        let stillActive = false;
+        const limit = MAP_WIDTH * TILE_SIZE + 300;
+        
+        for (let g of t.ghosts) {
+            g.x += g.vx;
+            if (t.dir === 1 && g.x < limit) stillActive = true;
+            if (t.dir === -1 && g.x > -300) stillActive = true;
+            
+            const pIds = Object.keys(game.players);
+            for (const pid of pIds) { 
+                const p = game.players[pid]; 
+                if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0 && 
+                    Math.abs(p.x - g.x) < 25 && Math.abs(p.y - g.y) < 25) {
+                    loseLife(game, p); 
+                }
+            }
+        }
+        
+        if (!stillActive) {
+            t.state = 'OFF';
+            t.ghosts = [];
+        }
+    }
+}
+
 function updateGamePhysics(game) {
     const pIds = Object.keys(game.players);
     const anyAlive = pIds.some(id => game.players[id].alive);
@@ -389,6 +545,7 @@ function updateGamePhysics(game) {
     game.cameraY -= game.gameSpeed * speedMult;
     handleRocketLogic(game);
     handleSurgeLogic(game); 
+    handleTrainLogic(game);
 
     let ratio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
