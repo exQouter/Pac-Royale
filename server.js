@@ -408,9 +408,7 @@ function handleRocketLogic(game) {
     const fc = game.frameCounter;
     
     if (!rs.active && fc >= rs.nextCycle) { 
-        // ПРОВЕРКА КОНФЛИКТА С ВОЛНОЙ (SURGE)
         if (game.surge.state !== 'IDLE') {
-            // Если волна активна, откладываем ракеты на 2 секунды
             rs.nextCycle = fc + 120;
             return;
         }
@@ -449,9 +447,7 @@ function handleSurgeLogic(game) {
     
     if (s.state === 'IDLE') {
         if (fc >= s.nextTime) { 
-            // ПРОВЕРКА КОНФЛИКТА С РАКЕТАМИ
             if (game.rocketState.active) {
-                // Если ракеты активны, откладываем волну на 2 секунды
                 s.nextTime = fc + 120;
                 return;
             }
@@ -652,7 +648,22 @@ function updateGamePhysics(game) {
                 const best = valid[0]; g.vx = best.x * speed; g.vy = best.y * speed; g.lastDir = {x: best.x, y: best.y};
             } else { g.vx = 0; g.vy = 0; }
         }
-        g.x += g.vx; g.y += g.vy;
+        
+        // --- GHOST STOPPING FOR TRAIN ---
+        let allowMove = true;
+        if (['YELLOW', 'RED', 'CROSSING'].includes(game.train.state)) {
+            const nextY = g.y + g.vy;
+            const safeDistance = 60; // Достаточное расстояние, чтобы не войти в поезд
+            if (Math.abs(nextY - game.train.targetY) < safeDistance) {
+                allowMove = false;
+            }
+        }
+
+        if (allowMove) {
+            g.x += g.vx;
+            g.y += g.vy;
+        }
+        
         const pIds = Object.keys(game.players);
         for(const pid of pIds) {
             const p = game.players[pid];
