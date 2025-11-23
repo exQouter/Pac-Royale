@@ -46,10 +46,10 @@ const SURGE_MAX_HEIGHT = 240;
 // Настройки поезда
 const TRAIN_MIN_PATTERNS = 10;
 const TRAIN_MAX_PATTERNS = 30;
-const TRAIN_YELLOW_TIME = 180; // 3 секунды
-const TRAIN_RED_TIME = 60;     // 1 секунда
-const TRAIN_SPEED = 12.0;      // Очень быстро
-const TRAIN_LENGTH = 40;       // Длинный состав
+const TRAIN_YELLOW_TIME = 180; 
+const TRAIN_RED_TIME = 60;     
+const TRAIN_SPEED = 12.0;      
+const TRAIN_LENGTH = 40;       
 
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
 const lobbies = {};
@@ -119,7 +119,7 @@ function createGame(roomId) {
         nextTrainLimit: TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS)),
         trainGapRows: 0, 
         train: {
-            state: 'OFF', // OFF, WAITING, YELLOW, RED, CROSSING
+            state: 'OFF', 
             targetY: 0,
             timer: 0,
             dir: 1,
@@ -176,7 +176,6 @@ function resetGame(game) {
 }
 
 function generateRow(game, yIndex) {
-    // Генерация разрыва для поезда
     if (game.trainGapRows > 0) {
         const row = new Array(MAP_WIDTH).fill(TILE.EMPTY);
         row[0] = TILE.WALL;
@@ -186,11 +185,8 @@ function generateRow(game, yIndex) {
         if (!game.changes.newRows) game.changes.newRows = {};
         game.changes.newRows[yIndex] = row;
 
-        // Если это середина разрыва (разрыв 5 строк, середина - 3-я по счету генерации)
-        // 5 (верх), 4, 3 (центр), 2, 1 (низ)
         if (game.trainGapRows === 3) {
             game.train.state = 'WAITING';
-            // targetY - центр путей
             game.train.targetY = yIndex * TILE_SIZE;
             game.train.dir = Math.random() > 0.5 ? 1 : -1;
             game.train.ghosts = [];
@@ -208,7 +204,6 @@ function generateRow(game, yIndex) {
         game.patternsSinceTrain++;
         
         if (game.patternsSinceTrain >= game.nextTrainLimit) {
-            // Разрыв 5 строк: 3 для поезда + буферы
             game.trainGapRows = 5; 
             game.patternsSinceTrain = 0;
             game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
@@ -411,7 +406,17 @@ setInterval(() => {
 function handleRocketLogic(game) {
     const rs = game.rocketState;
     const fc = game.frameCounter;
-    if (!rs.active && fc >= rs.nextCycle) { rs.active = true; rs.wavesLeft = 3; rs.nextWaveTime = fc; }
+    
+    if (!rs.active && fc >= rs.nextCycle) { 
+        // ПРОВЕРКА КОНФЛИКТА С ВОЛНОЙ (SURGE)
+        if (game.surge.state !== 'IDLE') {
+            // Если волна активна, откладываем ракеты на 2 секунды
+            rs.nextCycle = fc + 120;
+            return;
+        }
+        rs.active = true; rs.wavesLeft = 3; rs.nextWaveTime = fc; 
+    }
+    
     if (rs.active) {
         if (rs.wavesLeft > 0 && fc >= rs.nextWaveTime) {
             rs.wavesLeft--; rs.nextWaveTime = fc + ROCKET_WAVE_INTERVAL; 
@@ -441,8 +446,17 @@ function handleRocketLogic(game) {
 function handleSurgeLogic(game) {
     const s = game.surge;
     const fc = game.frameCounter;
+    
     if (s.state === 'IDLE') {
-        if (fc >= s.nextTime) { s.state = 'RISING'; io.to(game.id).emit('sfx', 'warning'); }
+        if (fc >= s.nextTime) { 
+            // ПРОВЕРКА КОНФЛИКТА С РАКЕТАМИ
+            if (game.rocketState.active) {
+                // Если ракеты активны, откладываем волну на 2 секунды
+                s.nextTime = fc + 120;
+                return;
+            }
+            s.state = 'RISING'; io.to(game.id).emit('sfx', 'warning'); 
+        }
     } else if (s.state === 'RISING') {
         const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; 
         s.currentHeight += riseSpeed;
@@ -458,15 +472,9 @@ function handleTrainLogic(game) {
     const t = game.train;
     if (t.state === 'OFF') return;
 
-    // ЛОГИКА ТАЙМИНГА
-    // t.targetY - это координата Y путей на карте (фиксированная).
-    // game.cameraY - это координата Y верха экрана камеры (уменьшается со временем).
-    // screenY - это где пути находятся визуально на экране в данный момент.
-    // Если screenY = 0, пути на самом верху. Если screenY = 800, они внизу.
     const screenY = t.targetY - game.cameraY;
 
     if (t.state === 'WAITING') {
-        // Запускаем последовательность, только когда пути уже на экране (> 100px от верха)
         if (screenY > 100 && screenY < 900) {
             t.state = 'YELLOW';
             t.timer = TRAIN_YELLOW_TIME;
@@ -484,12 +492,10 @@ function handleTrainLogic(game) {
         t.timer--;
         if (t.timer <= 0) {
             t.state = 'CROSSING';
-            // СПАВН ТРОЙНОГО ПОЕЗДА
             const ghostCount = TRAIN_LENGTH; 
             const colors = ['red','pink','cyan','orange'];
             const startX = t.dir === 1 ? -150 : (MAP_WIDTH * TILE_SIZE + 150);
             
-            // Занимаем targetY (центр), targetY + 30 (ниже), targetY - 30 (выше)
             const offsets = [-TILE_SIZE, 0, TILE_SIZE];
 
             for (let rowOffset of offsets) {

@@ -264,9 +264,6 @@
             playRocket() { if(this.isMuted) return; const t=this.ctx.currentTime; const noise=this.ctx.createBufferSource(); noise.buffer=this.createNoiseBuffer(); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(800,t); f.frequency.exponentialRampToValueAtTime(100,t+1.0); const g=this.ctx.createGain(); g.gain.setValueAtTime(0.4,t); g.gain.exponentialRampToValueAtTime(0.01,t+1.0); noise.connect(f); f.connect(g); g.connect(this.masterGain); noise.start(t); }
             playTrainBell() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(800,t); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.1,t+0.05); g.gain.linearRampToValueAtTime(0,t+0.2); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+0.3); }
             
-            // --- NEW SOUNDS ---
-            
-            // Train Rumble (Low frequency noise)
             playTrainRumble() {
                 if (this.isMuted) return;
                 const t = this.ctx.currentTime;
@@ -296,14 +293,12 @@
                 noise.start(t);
             }
 
-            // Jaws Theme (Evil Mode)
             startEvilTheme() {
                 if (this.isMuted || this.evilInterval) return;
                 this.stopSiren(); // Stop standard waka siren
                 let note = 0;
                 const playStep = () => {
                     if (this.isMuted) return;
-                    // Alternating E (82.41 Hz) and F (87.31 Hz) roughly
                     const freq = note % 2 === 0 ? 73.42 : 77.78; // D and D# (Low)
                     this.playEvilNote(freq);
                     note++;
@@ -427,7 +422,8 @@
             document.getElementById('ui-layer').style.display = 'none';
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
-            const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#9900ff"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
+            // CHANGED: Red color for Evil Emoji in Game Over
+            const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#FF0000"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
             const cherryIcon = '<span style="font-size:20px">🍒</span>';
             document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherryIcon}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
             const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
@@ -482,27 +478,32 @@
             if (s.camY !== undefined) visualCamY = lerp(visualCamY, s.camY, 5 * dt);
 
             let shakeX = 0, shakeY = 0;
-            if (s.sbt > 0) { shakeX = (Math.random() - 0.5) * 4; shakeY = (Math.random() - 0.5) * 4; }
+            // CHANGED: Shake logic included Surge and Train
+            let isShaking = s.sbt > 0;
+            if (s.surgeHeight > 0) isShaking = true;
+            if (s.train && s.train.state === 'CROSSING') isShaking = true;
+
+            if (isShaking) { shakeX = (Math.random() - 0.5) * 4; shakeY = (Math.random() - 0.5) * 4; }
 
             const cdEl = document.getElementById('countdown-display');
             if (s.cd > 0) { cdEl.style.display = 'block'; cdEl.innerText = Math.ceil(s.cd); } else if (s.cd > -1) { cdEl.style.display = 'block'; cdEl.innerText = "GO!"; } else { cdEl.style.display = 'none'; }
             
-            // --- AUDIO LOGIC UPDATES ---
-            // Check for Evil Mode (PvP)
-            if (s.players && s.players[socket.id]) {
-                const myP = s.players[socket.id];
-                if (myP.pvpTimer > 0) {
-                    synth.startEvilTheme();
-                } else {
-                    synth.stopEvilTheme();
-                    // Resume normal siren if not in countdown
-                    if (now - (s.st || 0) > 4000 || s.cd < 0) { 
-                        if(s.ft > 0) synth.checkSirenUpdate('power'); 
-                        else synth.checkSirenUpdate('normal'); 
-                    }
+            // CHANGED: Check if ANY player is in Evil Mode for global audio
+            let anyEvil = false;
+            if (s.players) {
+                anyEvil = Object.values(s.players).some(p => p.pvpTimer > 0);
+            }
+
+            if (anyEvil) {
+                synth.startEvilTheme();
+            } else {
+                synth.stopEvilTheme();
+                // Resume normal siren if not in countdown
+                if (now - (s.st || 0) > 4000 || s.cd < 0) { 
+                    if(s.ft > 0) synth.checkSirenUpdate('power'); 
+                    else synth.checkSirenUpdate('normal'); 
                 }
             }
-            // ---------------------------
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const startRow = Math.floor(visualCamY / TILE_SIZE) - 2;
