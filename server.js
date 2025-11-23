@@ -113,8 +113,6 @@ function createGame(roomId) {
         speedBoostTimer: 0, globalThreshold: 0, frameCounter: 0,
         rocketState: { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] },
         surge: { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) },
-        
-        // Train Logic
         patternsSinceTrain: 0,
         nextTrainLimit: TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS)),
         trainGapRows: 0, 
@@ -649,11 +647,10 @@ function updateGamePhysics(game) {
             } else { g.vx = 0; g.vy = 0; }
         }
         
-        // --- GHOST STOPPING FOR TRAIN ---
         let allowMove = true;
         if (['YELLOW', 'RED', 'CROSSING'].includes(game.train.state)) {
             const nextY = g.y + g.vy;
-            const safeDistance = 60; // Достаточное расстояние, чтобы не войти в поезд
+            const safeDistance = 60; 
             if (Math.abs(nextY - game.train.targetY) < safeDistance) {
                 allowMove = false;
             }

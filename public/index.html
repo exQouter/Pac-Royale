@@ -65,7 +65,10 @@
         .menu-label { font-size: 10px; color: #888; margin-bottom: 5px; text-align: center; }
         
         .lobby-container { display: flex; gap: 15px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
-        .lobby-slot { width: 80px; height: 120px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        
+        /* UPDATED: Lobby slot size increased */
+        .lobby-slot { width: 110px; height: 130px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        
         .lobby-slot.filled { border-color: #fff; background: #111; }
         .slot-label { font-size: 8px; color: #666; position: absolute; top: 5px; }
         .slot-name { font-size: 10px; color: #fff; margin-top: 10px; word-break: break-all; }
@@ -117,7 +120,10 @@
             .screen { padding: 15px; min-width: 0 !important; width: 90% !important; max-width: 95% !important; }
             #lobby-screen { min-width: 0 !important; }
             .lobby-container { gap: 5px; }
-            .lobby-slot { width: 60px; height: 90px; border-width: 2px; }
+            
+            /* UPDATED: Mobile lobby slot size increased */
+            .lobby-slot { width: 85px; height: 100px; border-width: 2px; }
+            
             .slot-pacman { width: 30px; height: 30px; }
             .slot-name { font-size: 8px; }
             .lobby-code { font-size: 16px; padding: 5px; }
@@ -356,15 +362,15 @@
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#FF0000"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
-            const cherryIcon = '<span style="font-size:20px">🍒</span>';
-            document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherryIcon}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
+            const cherrySVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="18" r="6" fill="#ff0000"/><path d="M15,18 Q20,10 22,8" stroke="#00ff00" stroke-width="2" fill="none"/></svg>`;
+            document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherrySVG}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
             const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
-            const btnText = data.allDead ? 'PLAY AGAIN 🏠' : 'WAITING...';
-            document.getElementById('go-buttons').innerHTML = `<button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!data.leaderboard.some(p=>p.alive)?'disabled':''}>SPECTATE 👁️</button><button id="btn-replay" class="btn-play-again" onclick="returnToLobby()" ${btnState}>${btnText}</button><button class="btn-main-menu" onclick="location.reload()">MAIN MENU 🔙</button>`;
+            const btnText = data.allDead ? 'PLAY AGAIN' : 'WAITING...';
+            document.getElementById('go-buttons').innerHTML = `<button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!data.leaderboard.some(p=>p.alive)?'disabled':''}>SPECTATE</button><button id="btn-replay" class="btn-play-again" onclick="returnToLobby()" ${btnState}>${btnText}</button><button class="btn-main-menu" onclick="location.reload()">MAIN MENU</button>`;
             const po={}; data.leaderboard.forEach(p=>po[p.name]=p); updateLeaderboardHTML(po); synth.stopSiren(); 
         });
 
-        socket.on('matchEnded', () => { const btn = document.getElementById('btn-replay'); if(btn) { btn.disabled = false; btn.style.background = '#00FF00'; btn.style.cursor = 'pointer'; btn.innerText = 'PLAY AGAIN 🏠'; } synth.stopAll(); });
+        socket.on('matchEnded', () => { const btn = document.getElementById('btn-replay'); if(btn) { btn.disabled = false; btn.style.background = '#00FF00'; btn.style.cursor = 'pointer'; btn.innerText = 'PLAY AGAIN'; } synth.stopAll(); });
         socket.on('leaderboardUpdate', d => leaderboardData = d);
         
         let lastInputTime = 0;
@@ -413,6 +419,10 @@
             let isShaking = s.sbt > 0;
             if (s.surgeHeight > 0) isShaking = true;
             if (s.train && s.train.state === 'CROSSING') isShaking = true;
+
+            if (document.getElementById('game-over').classList.contains('visible')) {
+                isShaking = false;
+            }
 
             if (isShaking) { shakeX = (Math.random() - 0.5) * 4; shakeY = (Math.random() - 0.5) * 4; }
 
