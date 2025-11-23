@@ -318,6 +318,8 @@
         socket.on('roomClosed', () => { hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); document.getElementById('host-left-screen').classList.add('visible'); synth.stopSiren(); });
         
         socket.on('gameStarted', () => { 
+            prevScore = 0; // <--- FIX: Сброс счета при старте игры
+            visualPlayers = {}; 
             hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); 
             document.getElementById('ui-layer').style.display = 'flex';
             canvas.style.display = 'block'; document.getElementById('mute-btn').style.display = 'flex'; 
@@ -351,7 +353,6 @@
 
         // --- HELPER TO GET ITEM SVG ---
         function getItemSVG(type) {
-            // Using numeric IDs from server (4=Cherry, 7=Strawberry...)
             if (type == 4) return `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="18" r="6" fill="#ff0000"/><path d="M15,18 Q20,10 22,8" stroke="#00ff00" stroke-width="2" fill="none"/></svg>`;
             if (type == 7) return `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M8,10 L22,10 L15,22 Z" fill="#de0000"/><path d="M8,10 L15,5 L22,10" fill="#00ff00"/><rect x="12" y="12" width="2" height="2" fill="#fff"/><rect x="16" y="14" width="2" height="2" fill="#fff"/></svg>`;
             if (type == 8) return `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="16" r="7" fill="#ffae00"/><path d="M15,9 Q18,9 20,12 L15,12 Z" fill="#00ff00"/></svg>`;
@@ -372,18 +373,12 @@
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#FF0000"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
             
-            // GENERATE STATS HTML DYNAMICALLY
             let statsHtml = "";
-            
-            // 1. Standard stats (always shown if > 0 or preferred)
             if (data.stats.ghosts > 0) statsHtml += `<div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div>`;
             if (data.stats.players > 0) statsHtml += `<div class="stat-item">${pacSVG}x${data.stats.players}</div>`;
             if (data.stats.evil > 0) statsHtml += `<div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
 
-            // 2. Loop through collected items (Fruits)
-            // data.items is { "4": 2, "7": 1, ... } where keys are TILE IDs
             if (data.items) {
-                // Sort by ID to keep consistent order
                 const keys = Object.keys(data.items).sort((a,b) => parseInt(a) - parseInt(b));
                 for (const key of keys) {
                     const count = data.items[key];
@@ -535,7 +530,16 @@
                 if(!visualPlayers[id]) visualPlayers[id] = {x: p.x, y: p.y};
                 const panel = document.getElementById(`p${p.colorIdx}`);
                 if(panel) { panel.style.setProperty('--p-color', p.color); panel.classList.add('active'); document.getElementById(`n${p.colorIdx}`).innerText = p.name; document.getElementById(`s${p.colorIdx}`).innerText = p.score; document.getElementById(`l${p.colorIdx}`).innerText = p.alive ? "❤️".repeat(p.lives) : "DEAD"; }
-                if(p.id === socket.id && p.score > prevScore) { synth.playWaka(); prevScore = p.score; }
+                
+                // --- FIX: Logic for playing Waka sound ---
+                if(p.id === socket.id) {
+                    if (p.score < prevScore) prevScore = p.score;
+                    if (p.score > prevScore) { 
+                        synth.playWaka(); 
+                        prevScore = p.score; 
+                    }
+                }
+                
                 if(!p.alive) continue;
                 
                 const dist = Math.sqrt((visualPlayers[id].x - p.x)**2 + (visualPlayers[id].y - p.y)**2);

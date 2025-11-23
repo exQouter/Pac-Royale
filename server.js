@@ -32,7 +32,6 @@ const PVP_MODE_DURATION = 300;
 const DEATH_ANIMATION_FRAMES = 60;
 const SPEED_BOOST_DURATION = 420; 
 const SCORE_MILESTONE = 10000;    
-const FRUIT_SPAWN_SCORE_STEP = 700; // Каждые 700 очков спавним фрукт
 
 const ROCKET_START_TIME = 10800; 
 const ROCKET_WAVE_INTERVAL = 180; 
@@ -69,6 +68,19 @@ const TILE = {
     BELL: 12,
     KEY: 13
 };
+
+// --- КОНФИГУРАЦИЯ ПРЕДМЕТОВ ---
+// weight - чем больше число, тем чаще падает (относительно других доступных)
+const ITEMS_CONFIG = [
+    { id: TILE.CHERRY,     weight: 1000 }, // 0 - 699
+    { id: TILE.STRAWBERRY, weight: 600 },  // 700 - 1399
+    { id: TILE.ORANGE,     weight: 400 },  // 1400 - 2099
+    { id: TILE.APPLE,      weight: 300 },  // 2100 - 2799
+    { id: TILE.MELON,      weight: 200 },  // ...
+    { id: TILE.GALAXIAN,   weight: 100 },
+    { id: TILE.BELL,       weight: 50 },
+    { id: TILE.KEY,        weight: 10 }
+];
 
 const lobbies = {};
 
@@ -129,7 +141,6 @@ function createGame(roomId) {
         isRunning: false, hostId: null, countdown: 0, startTime: 0,
         changes: { removedDots: [], newRows: {} },
         speedBoostTimer: 0, globalThreshold: 0, frameCounter: 0,
-        pendingFruits: 0, // Очередь на спавн фруктов
         rocketState: { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] },
         surge: { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) },
         patternsSinceTrain: 0,
@@ -141,7 +152,9 @@ function createGame(roomId) {
             timer: 0,
             dir: 1,
             ghosts: [] 
-        }
+        },
+        // Логика спавна предметов
+        patternFruitConfig: [] // Хранит информацию: на какой строке паттерна спавнить фрукт
     };
     initMap(game);
     return game;
@@ -155,7 +168,7 @@ function initMap(game) {
     game.train.state = 'OFF';
     game.patternsSinceTrain = 0;
     game.trainGapRows = 0;
-    game.pendingFruits = 0;
+    game.patternFruitConfig = [];
     
     for(let y=30; y>=-50; y--) generateRow(game, y);
     for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
@@ -171,13 +184,13 @@ function resetGame(game) {
     game.speedBoostTimer = 0;
     game.globalThreshold = 0;
     game.frameCounter = 0;
-    game.pendingFruits = 0;
     game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
     game.surge = { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) };
     game.train = { state: 'OFF', targetY: 0, timer: 0, dir: 1, ghosts: [] };
     game.patternsSinceTrain = 0;
     game.trainGapRows = 0;
     game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
+    game.patternFruitConfig = [];
 
     initMap(game);
     const pIds = Object.keys(game.players);
@@ -190,23 +203,40 @@ function resetGame(game) {
         p.vx = 0; p.vy = 0; p.nextDir = null;
         p.score = 0; p.lives = 3; p.alive = true;
         p.invulnTimer = 0; p.pvpTimer = 0; p.deathTimer = 0;
-        p.lastFruitStep = 0;
         p.lastMilestone = 0;
         p.itemsCollected = {}; // Для детальной статистики
         p.stats = { ghosts: 0, players: 0, evil: 0 };
     }
 }
 
-function getRandomFruit() {
-    const f = Math.random();
-    if (f < 0.40) return TILE.CHERRY;
-    if (f < 0.60) return TILE.STRAWBERRY;
-    if (f < 0.75) return TILE.ORANGE;
-    if (f < 0.85) return TILE.APPLE;
-    if (f < 0.92) return TILE.MELON;
-    if (f < 0.96) return TILE.GALAXIAN;
-    if (f < 0.98) return TILE.BELL;
-    return TILE.KEY;
+// Новая функция: Выбор предмета на основе счета
+function getWeightedFruit(game) {
+    // 1. Находим максимальный счет среди живых (или всех) игроков
+    let maxScore = 0;
+    const pIds = Object.keys(game.players);
+    for (const pid of pIds) {
+        if (game.players[pid].score > maxScore) maxScore = game.players[pid].score;
+    }
+
+    // 2. Определяем, какие предметы доступны (каждые 700 очков открывается новый)
+    // 0-699: index 0 (Cherry)
+    // 700-1399: index 1 (Strawberry) добавится
+    let unlockedCount = Math.floor(maxScore / 700) + 1;
+    if (unlockedCount > ITEMS_CONFIG.length) unlockedCount = ITEMS_CONFIG.length;
+
+    // 3. Формируем пул доступных предметов
+    const pool = ITEMS_CONFIG.slice(0, unlockedCount);
+
+    // 4. Взвешенный рандом
+    let totalWeight = 0;
+    for (let item of pool) totalWeight += item.weight;
+
+    let rnd = Math.random() * totalWeight;
+    for (let item of pool) {
+        if (rnd < item.weight) return item.id;
+        rnd -= item.weight;
+    }
+    return TILE.CHERRY;
 }
 
 function generateRow(game, yIndex) {
@@ -234,6 +264,7 @@ function generateRow(game, yIndex) {
         return; 
     }
 
+    // --- НАЧАЛО НОВОГО ПАТТЕРНА ---
     if (!game.currentPattern || game.patternRowIndex >= 10) {
         game.patternsSinceTrain++;
         
@@ -247,34 +278,93 @@ function generateRow(game, yIndex) {
 
         game.currentPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
         game.patternRowIndex = 0;
+
+        // ПЛАНИРОВАНИЕ СПАВНА ФРУКТОВ ДЛЯ ЭТОГО ПАТТЕРНА (0-2 штуки)
+        game.patternFruitConfig = [];
+        const itemsCount = Math.floor(Math.random() * 3); // 0, 1 или 2
+        
+        if (itemsCount > 0) {
+            const possibleRows = [];
+            // Собираем индексы строк (0-9)
+            for(let r=0; r<10; r++) possibleRows.push(r);
+            
+            // Перемешиваем и берем itemsCount строк
+            for (let i = possibleRows.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [possibleRows[i], possibleRows[j]] = [possibleRows[j], possibleRows[i]];
+            }
+            
+            const chosenRows = possibleRows.slice(0, itemsCount);
+            chosenRows.forEach(rIndex => {
+                game.patternFruitConfig.push(rIndex);
+            });
+        }
     }
     
-    const half = game.currentPattern[9 - game.patternRowIndex];
+    // --- ГЕНЕРАЦИЯ СТРОКИ ---
+    const patternIdx = game.patternRowIndex; // 0..9
+    const half = game.currentPattern[9 - patternIdx];
     game.patternRowIndex++;
     const row = new Array(MAP_WIDTH);
     
-    function getContent() {
-        const r = Math.random();
-        // 1. Приоритет: Спавн предметов по очкам
-        if (game.pendingFruits > 0 && Math.random() < 0.1) {
-            game.pendingFruits--;
-            return getRandomFruit();
+    // Проверяем, должен ли в этой строке быть фрукт
+    let fruitSpawnInfo = null;
+    if (game.patternFruitConfig.includes(patternIdx)) {
+        // Ищем валидные позиции в half массиве (где не стена и не Power)
+        const validIndices = [];
+        for(let k=0; k<10; k++) {
+            if (half[k] !== 1 && half[k] !== 3) validIndices.push(k);
         }
         
-        // 2. Обычный спавн (только EVIL и HEART)
+        if (validIndices.length > 0) {
+            const chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
+            const side = Math.random() < 0.5 ? 'left' : 'right'; // Спавним только с одной стороны
+            fruitSpawnInfo = { idx: chosenIdx, side: side, type: getWeightedFruit(game) };
+        }
+    }
+
+    // Обычная рандомная начинка (Heart, Evil, Dot)
+    function getStandardContent() {
+        const r = Math.random();
+        // Evil (очень редко)
         if (r < 0.0005) return TILE.EVIL; 
-        else if (r < 0.0020) return TILE.HEART; 
-        
+        // Heart (очень редко)
+        if (r < 0.0025) return TILE.HEART; 
         return TILE.DOT;
     }
 
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
         const right = 19 - i;
-        if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
-        else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
-        else { row[i] = getContent(); row[right] = getContent(); }
+        
+        // Стены и PowerPellets копируем как есть
+        if (val === 1) { 
+            row[i] = TILE.WALL; 
+            row[right] = TILE.WALL; 
+        } 
+        else if (val === 3) { 
+            row[i] = TILE.POWER; 
+            row[right] = TILE.POWER; 
+        } 
+        else { 
+            // По умолчанию - стандартный контент
+            let leftItem = getStandardContent();
+            let rightItem = getStandardContent();
+
+            // Если в этой строке запланирован фрукт
+            if (fruitSpawnInfo && fruitSpawnInfo.idx === i) {
+                if (fruitSpawnInfo.side === 'left') {
+                    leftItem = fruitSpawnInfo.type;
+                } else {
+                    rightItem = fruitSpawnInfo.type;
+                }
+            }
+
+            row[i] = leftItem;
+            row[right] = rightItem;
+        }
     }
+
     game.rows[yIndex] = row;
     if (!game.changes.newRows) game.changes.newRows = {};
     game.changes.newRows[yIndex] = row;
@@ -322,7 +412,6 @@ io.on('connection', (socket) => {
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
-            lastFruitStep: 0,
             lastMilestone: 0,
             itemsCollected: {},
             stats: { ghosts: 0, players: 0, evil: 0 }
@@ -616,13 +705,6 @@ function updateGamePhysics(game) {
         if (p.deathTimer > 0) { p.deathTimer--; if (p.deathTimer === 0) finalizeDeath(game, p); continue; }
         if(p.invulnTimer > 0) p.invulnTimer--;
         if(p.pvpTimer > 0) p.pvpTimer--;
-        
-        // --- 700 Points Logic for Fruit Spawning ---
-        const steps = Math.floor(p.score / FRUIT_SPAWN_SCORE_STEP);
-        if (steps > p.lastFruitStep) {
-            game.pendingFruits += (steps - p.lastFruitStep);
-            p.lastFruitStep = steps;
-        }
 
         // --- 10000 Points Logic for 1UP ---
         const myMilestone = Math.floor(p.score / SCORE_MILESTONE);
@@ -676,14 +758,15 @@ function updateGamePhysics(game) {
 
             if(tile === TILE.DOT) { p.score += 10; }
             else if(tile === TILE.POWER) { p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
-            else if(tile === TILE.CHERRY) { collectItem(TILE.CHERRY, 100, "#ffb8ae", "+100"); }
-            else if(tile === TILE.STRAWBERRY) { collectItem(TILE.STRAWBERRY, 300, "#de0000", "+300"); }
-            else if(tile === TILE.ORANGE) { collectItem(TILE.ORANGE, 500, "#ffae00", "+500"); }
-            else if(tile === TILE.APPLE) { collectItem(TILE.APPLE, 700, "#ff0000", "+700"); }
-            else if(tile === TILE.MELON) { collectItem(TILE.MELON, 1000, "#00ff00", "+1000"); }
-            else if(tile === TILE.GALAXIAN) { collectItem(TILE.GALAXIAN, 2000, "#ffff00", "+2000"); }
-            else if(tile === TILE.BELL) { collectItem(TILE.BELL, 3000, "#ffff00", "+3000"); }
-            else if(tile === TILE.KEY) { collectItem(TILE.KEY, 5000, "#00ffff", "+5000"); }
+            // Все цвета заменены на белый #FFFFFF
+            else if(tile === TILE.CHERRY) { collectItem(TILE.CHERRY, 100, "#FFFFFF", "+100"); }
+            else if(tile === TILE.STRAWBERRY) { collectItem(TILE.STRAWBERRY, 300, "#FFFFFF", "+300"); }
+            else if(tile === TILE.ORANGE) { collectItem(TILE.ORANGE, 500, "#FFFFFF", "+500"); }
+            else if(tile === TILE.APPLE) { collectItem(TILE.APPLE, 700, "#FFFFFF", "+700"); }
+            else if(tile === TILE.MELON) { collectItem(TILE.MELON, 1000, "#FFFFFF", "+1000"); }
+            else if(tile === TILE.GALAXIAN) { collectItem(TILE.GALAXIAN, 2000, "#FFFFFF", "+2000"); }
+            else if(tile === TILE.BELL) { collectItem(TILE.BELL, 3000, "#FFFFFF", "+3000"); }
+            else if(tile === TILE.KEY) { collectItem(TILE.KEY, 5000, "#FFFFFF", "+5000"); }
             
             else if(tile === TILE.EVIL) { p.pvpTimer = PVP_MODE_DURATION; p.stats.evil++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
