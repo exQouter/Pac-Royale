@@ -14,15 +14,9 @@ app.use(express.static('public'));
 // --- КОНФИГУРАЦИЯ ---
 const TILE_SIZE = 30;
 const MAP_WIDTH = 20;
+const PLAYER_COLORS = ['#FFFF00', '#00FF00', '#BF00FF', '#0055FF'];
 
-// 4 Цвета
-const PLAYER_COLORS = [
-    '#FFFF00', // Yellow
-    '#00FF00', // Green
-    '#BF00FF', // Purple
-    '#0055FF'  // Deep Blue
-];
-
+// Физика и скорость
 const CAM_SPEED_START = 0.8;
 const CAM_SPEED_MAX   = 3.0;
 const CAM_ACCEL       = 0.000122; 
@@ -36,7 +30,6 @@ const FRIGHT_SPEED_MAX   = 2.0;
 const POWER_MODE_DURATION = 240;
 const PVP_MODE_DURATION = 300;
 const DEATH_ANIMATION_FRAMES = 60;
-
 const SPEED_BOOST_DURATION = 420; 
 const SCORE_MILESTONE = 10000;    
 
@@ -44,16 +37,13 @@ const ROCKET_START_TIME = 10800;
 const ROCKET_WAVE_INTERVAL = 180; 
 const ROCKET_WARNING_TIME = 120; 
 const ROCKET_Y_OFFSET = 720; 
-
-// SURGE (Цунами) SETTINGS
-const SURGE_MIN_INTERVAL = 3600;  // 1 минута
-const SURGE_MAX_INTERVAL = 18000; // 5 минут
-const SURGE_RISE_TIME = 600;      // 10 секунд
-const SURGE_RETURN_TIME = 180;    // 3 секунды
-const SURGE_MAX_HEIGHT = 240;     // 30% высоты
+const SURGE_MIN_INTERVAL = 3600;
+const SURGE_MAX_INTERVAL = 18000;
+const SURGE_RISE_TIME = 600;
+const SURGE_RETURN_TIME = 180;
+const SURGE_MAX_HEIGHT = 240;
 
 const TILE = { EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6 };
-
 const lobbies = {};
 
 // --- ЛИДЕРБОРД ---
@@ -66,20 +56,20 @@ function loadLeaderboard() {
         if (fs.existsSync(DATA_FILE)) {
             globalLeaderboard = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         }
-    } catch (err) { globalLeaderboard = []; }
+    } catch (err) { console.warn("Leaderboard load warning:", err.message); globalLeaderboard = []; }
 }
 
 function saveLeaderboard() {
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         fs.writeFile(DATA_FILE, JSON.stringify(globalLeaderboard, null, 2), (err) => {
-            if (err) console.error('Save error:', err);
+            if (err) console.error('Leaderboard save failed (ignoring):', err.message);
         });
     }, 5000);
 }
 
 function updateGlobalLeaderboard(name, score) {
-    const safeName = (name || "PLAYER").substring(0, 10).toUpperCase();
+    const safeName = (name || "PLAYER").substring(0, 10).toUpperCase().replace(/[<>]/g, "");
     globalLeaderboard.push({ name: safeName, score: parseInt(score) || 0 });
     globalLeaderboard.sort((a, b) => b.score - a.score);
     globalLeaderboard = globalLeaderboard.slice(0, 10);
@@ -98,7 +88,6 @@ function makeId(length) {
 
 function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
-// --- ПАТТЕРНЫ (ВОЗВРАЩЕНЫ СТАРЫЕ) ---
 const PATTERNS = [
     [[1,0,0,0,0,0,0,0,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,1,1,1,0,1,1,0,1], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,0,1,0,1,1], [1,0,0,0,0,0,1,0,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,1,1,1,1,0,1,1,1,1]],
     [[1,0,0,0,1,0,0,0,0,0], [1,0,1,0,1,0,1,1,1,1], [1,0,1,0,1,0,0,0,0,0], [1,0,1,0,0,0,1,1,1,0], [1,0,1,1,1,0,1,3,0,0], [1,0,1,1,1,0,1,1,1,0], [1,0,0,0,0,0,0,0,0,0], [1,0,1,1,1,1,1,0,1,1], [1,0,0,0,0,0,0,0,0,1], [1,1,1,0,1,1,1,1,0,1]],
@@ -113,25 +102,10 @@ function createGame(roomId) {
         patternRowIndex: 0, currentPattern: null, 
         isRunning: false, hostId: null, countdown: 0, startTime: 0,
         changes: { removedDots: [], newRows: {} },
-        speedBoostTimer: 0,
-        globalThreshold: 0,
-        frameCounter: 0,
-        rocketState: {
-            nextCycle: ROCKET_START_TIME,
-            active: false,
-            wavesLeft: 0,
-            nextWaveTime: 0,
-            warnings: [],
-            rockets: []
-        },
-        // Состояние Цунами
-        surge: {
-            state: 'IDLE', // IDLE, RISING, RETURNING
-            currentHeight: 0,
-            nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL))
-        }
+        speedBoostTimer: 0, globalThreshold: 0, frameCounter: 0,
+        rocketState: { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] },
+        surge: { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) }
     };
-    
     initMap(game);
     return game;
 }
@@ -156,19 +130,12 @@ function resetGame(game) {
     game.globalThreshold = 0;
     game.frameCounter = 0;
     game.rocketState = { nextCycle: ROCKET_START_TIME, active: false, wavesLeft: 0, nextWaveTime: 0, warnings: [], rockets: [] };
-    
-    // Сброс Цунами
     game.surge = { state: 'IDLE', currentHeight: 0, nextTime: SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)) };
-
     initMap(game);
-
-    for (let pid in game.players) {
+    const pIds = Object.keys(game.players);
+    for (const pid of pIds) {
         const socketConnected = io.sockets.sockets.get(pid);
-        if (!socketConnected) {
-            delete game.players[pid];
-            continue;
-        }
-
+        if (!socketConnected) { delete game.players[pid]; continue; }
         const p = game.players[pid];
         p.x = (4 + p.colorIdx * 4) * TILE_SIZE;
         p.y = 22 * TILE_SIZE;
@@ -187,16 +154,12 @@ function generateRow(game, yIndex) {
     const half = game.currentPattern[9 - game.patternRowIndex];
     game.patternRowIndex++;
     const row = new Array(MAP_WIDTH);
-
     function getContent() {
         const r = Math.random();
         if (r < 0.0005) return TILE.EVIL; else if (r < 0.0020) return TILE.HEART; else if (r < 0.0070) return TILE.CHERRY; return TILE.DOT;
     }
-
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
-        // УБРАНА ЛОГИКА SAFETY LANE
-        
         const right = 19 - i;
         if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
         else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
@@ -205,9 +168,9 @@ function generateRow(game, yIndex) {
     game.rows[yIndex] = row;
     if (!game.changes.newRows) game.changes.newRows = {};
     game.changes.newRows[yIndex] = row;
-
-    const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 45;
-    for (let k in game.rows) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; }
+    const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 50;
+    const keys = Object.keys(game.rows);
+    if (keys.length > 150) { for (const k of keys) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; } }
 }
 
 function getTile(game, x, y) { if (!game.rows[y]) return TILE.WALL; return game.rows[y][x]; }
@@ -232,14 +195,11 @@ io.on('connection', (socket) => {
     function joinRoom(socket, roomId, nickname) {
         const game = lobbies[roomId];
         if (game.isRunning) { socket.emit('errorMsg', 'Game already started'); return; }
-        
         const currentPlayers = Object.values(game.players);
         const usedSlots = currentPlayers.map(p => p.colorIdx);
         let mySlot = -1;
         for(let i=0; i<4; i++) if(!usedSlots.includes(i)) { mySlot = i; break; }
-        
         if(mySlot === -1) { socket.emit('errorMsg', 'Lobby full'); return; }
-        
         const usedColors = currentPlayers.map(p => p.color);
         let myColor = null;
         if (!usedColors.includes(PLAYER_COLORS[mySlot])) { myColor = PLAYER_COLORS[mySlot]; } 
@@ -247,7 +207,7 @@ io.on('connection', (socket) => {
         if (!myColor) myColor = PLAYER_COLORS[0];
 
         game.players[socket.id] = {
-            id: socket.id, name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase(),
+            id: socket.id, name: (nickname || `P${mySlot+1}`).substring(0, 10).toUpperCase().replace(/[<>]/g, ""),
             colorIdx: mySlot, color: myColor, 
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
@@ -320,9 +280,10 @@ let tickCount = 0;
 
 setInterval(() => {
     tickCount++;
-    for (const roomId in lobbies) {
+    const roomIds = Object.keys(lobbies);
+    for (const roomId of roomIds) {
         const game = lobbies[roomId];
-        if (!game.isRunning) continue;
+        if (!game || !game.isRunning) continue;
         
         if (game.countdown > -1) game.countdown -= 1/60;
         
@@ -340,7 +301,8 @@ setInterval(() => {
 
         if (tickCount % 2 === 0) {
             const fastPlayers = {};
-            for(let pid in game.players) {
+            const pIds = Object.keys(game.players);
+            for(const pid of pIds) {
                 const p = game.players[pid];
                 fastPlayers[pid] = {
                     id: p.id, name: p.name, colorIdx: p.colorIdx, color: p.color,
@@ -350,12 +312,10 @@ setInterval(() => {
                     deathTimer: p.deathTimer, invulnTimer: p.invulnTimer, pvpTimer: p.pvpTimer
                 };
             }
-
             const fastGhosts = game.ghosts.map(g => ({
                 x: Math.round(g.x), y: Math.round(g.y),
                 color: g.color, vx: g.vx, vy: g.vy, dead: g.dead
             }));
-
             const s = { 
                 t: Date.now(), 
                 camY: Math.round(game.cameraY * 100) / 100, 
@@ -365,7 +325,6 @@ setInterval(() => {
                 rockets: game.rocketState.rockets, warnings: game.rocketState.warnings,
                 surgeHeight: Math.round(game.surge.currentHeight)
             };
-
             io.to(roomId).emit('state', s);
             game.changes = { removedDots: [], newRows: {} };
         }
@@ -375,9 +334,7 @@ setInterval(() => {
 function handleRocketLogic(game) {
     const rs = game.rocketState;
     const fc = game.frameCounter;
-
     if (!rs.active && fc >= rs.nextCycle) { rs.active = true; rs.wavesLeft = 3; rs.nextWaveTime = fc; }
-
     if (rs.active) {
         if (rs.wavesLeft > 0 && fc >= rs.nextWaveTime) {
             rs.wavesLeft--; rs.nextWaveTime = fc + ROCKET_WAVE_INTERVAL; 
@@ -391,7 +348,6 @@ function handleRocketLogic(game) {
             rs.active = false; rs.nextCycle = fc + 1800 + Math.floor(Math.random() * 5400); 
         }
     }
-
     const gColors = ['red','pink','cyan','orange'];
     for (let i = rs.warnings.length - 1; i >= 0; i--) {
         let w = rs.warnings[i]; w.y = game.cameraY + ROCKET_Y_OFFSET; w.timer--;
@@ -400,49 +356,37 @@ function handleRocketLogic(game) {
     for (let i = rs.rockets.length - 1; i >= 0; i--) {
         let r = rs.rockets[i]; r.y += r.vy;
         if (r.y < game.cameraY - 200) { rs.rockets.splice(i, 1); continue; }
-        for (let pid in game.players) { const p = game.players[pid]; if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0 && Math.abs(p.x - r.x) < 20 && Math.abs(p.y - r.y) < 20) loseLife(game, p); }
+        const pIds = Object.keys(game.players);
+        for (const pid of pIds) { const p = game.players[pid]; if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0 && Math.abs(p.x - r.x) < 20 && Math.abs(p.y - r.y) < 20) loseLife(game, p); }
     }
 }
 
 function handleSurgeLogic(game) {
     const s = game.surge;
     const fc = game.frameCounter;
-
     if (s.state === 'IDLE') {
-        if (fc >= s.nextTime) {
-            s.state = 'RISING';
-            io.to(game.id).emit('sfx', 'warning'); 
-        }
+        if (fc >= s.nextTime) { s.state = 'RISING'; io.to(game.id).emit('sfx', 'warning'); }
     } else if (s.state === 'RISING') {
         const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; 
         s.currentHeight += riseSpeed;
-        if (s.currentHeight >= SURGE_MAX_HEIGHT) {
-            s.currentHeight = SURGE_MAX_HEIGHT;
-            s.state = 'RETURNING';
-        }
+        if (s.currentHeight >= SURGE_MAX_HEIGHT) { s.currentHeight = SURGE_MAX_HEIGHT; s.state = 'RETURNING'; }
     } else if (s.state === 'RETURNING') {
         const returnSpeed = SURGE_MAX_HEIGHT / SURGE_RETURN_TIME; 
         s.currentHeight -= returnSpeed;
-        if (s.currentHeight <= 0) {
-            s.currentHeight = 0;
-            s.state = 'IDLE';
-            s.nextTime = fc + SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL));
-        }
+        if (s.currentHeight <= 0) { s.currentHeight = 0; s.state = 'IDLE'; s.nextTime = fc + SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)); }
     }
 }
 
 function updateGamePhysics(game) {
-    const anyAlive = Object.values(game.players).some(p => p.alive);
+    const pIds = Object.keys(game.players);
+    const anyAlive = pIds.some(id => game.players[id].alive);
     if (!anyAlive) return;
 
     game.frameCounter++;
-
     let speedMult = 1.0;
     if (game.speedBoostTimer > 0) { game.speedBoostTimer--; speedMult = 1.5; }
-
     if(game.gameSpeed < CAM_SPEED_MAX) game.gameSpeed += CAM_ACCEL;
     game.cameraY -= game.gameSpeed * speedMult;
-
     handleRocketLogic(game);
     handleSurgeLogic(game); 
 
@@ -456,11 +400,9 @@ function updateGamePhysics(game) {
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
     if(game.frightenedTimer > 0) game.frightenedTimer--;
-
     const deathY = (game.cameraY + 800) - game.surge.currentHeight;
 
-    const pIds = Object.keys(game.players);
-    for (let id of pIds) {
+    for (const id of pIds) {
         let p = game.players[id];
         if(!p.alive) continue;
         if (p.deathTimer > 0) { p.deathTimer--; if (p.deathTimer === 0) finalizeDeath(game, p); continue; }
@@ -479,9 +421,10 @@ function updateGamePhysics(game) {
         const gx = Math.round(p.x / TILE_SIZE), gy = Math.round(p.y / TILE_SIZE);
         const px = gx * TILE_SIZE, py = gy * TILE_SIZE;
         let spd = pSpeed; if (p.pvpTimer > 0) spd *= 1.3;
-
         const moveStep = spd;
-        if (Math.abs(p.x - px) <= moveStep && Math.abs(p.y - py) <= moveStep) {
+        const distSq = (p.x - px)**2 + (p.y - py)**2;
+        
+        if (distSq <= moveStep * moveStep) {
             if (p.nextDir && getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { 
                 p.x = px; p.y = py; p.vx = p.nextDir.x * spd; p.vy = p.nextDir.y * spd; p.nextDir = null; 
             }
@@ -504,13 +447,13 @@ function updateGamePhysics(game) {
             else if(tile === TILE.EVIL) { p.pvpTimer = PVP_MODE_DURATION; p.stats.evil++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         }
-        
         if(p.y > deathY) loseLife(game, p);
     }
 
     for (let i = 0; i < pIds.length; i++) {
         for (let j = i + 1; j < pIds.length; j++) {
             const p1 = game.players[pIds[i]], p2 = game.players[pIds[j]];
+            if (!p1 || !p2) continue;
             if (p1.alive && p2.alive && p1.deathTimer === 0 && p2.deathTimer === 0) {
                 if (Math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2) < TILE_SIZE) {
                     if (p1.pvpTimer > 0 && p2.invulnTimer <= 0) { p1.score += p2.score; p2.score = 0; p1.stats.players++; io.to(game.id).emit('popup', {x: p1.x, y: p1.y, text: "ATE PLAYER!"}); loseLife(game, p2); }
@@ -531,30 +474,24 @@ function updateGamePhysics(game) {
         const speed = game.frightenedTimer > 0 ? fSpeed : gSpeed;
         const gx = Math.round(g.x / TILE_SIZE), gy = Math.round(g.y / TILE_SIZE), px = gx * TILE_SIZE, py = gy * TILE_SIZE;
         const stuck = (g.vx===0 && g.vy===0), atCenter = (Math.abs(g.x-px) <= speed/2 && Math.abs(g.y-py) <= speed/2);
-
         if (stuck || atCenter) {
             if(!stuck) { g.x = px; g.y = py; }
             let target = null, minDist = Infinity;
-            for(let pid in game.players) { const pl = game.players[pid]; if(pl.alive && pl.deathTimer === 0) { let d = (pl.x-g.x)**2 + (pl.y-g.y)**2; if(d < minDist) { minDist = d; target = pl; } } }
+            const pIds = Object.keys(game.players);
+            for(const pid of pIds) { const pl = game.players[pid]; if(pl.alive && pl.deathTimer === 0) { let d = (pl.x-g.x)**2 + (pl.y-g.y)**2; if(d < minDist) { minDist = d; target = pl; } } }
             const dirs = [{x:0,y:-1}, {x:0,y:1}, {x:-1,y:0}, {x:1,y:0}];
             let valid = dirs.filter(d => getTile(game, gx+d.x, gy+d.y) !== TILE.WALL);
-            if (!stuck && valid.length > 1) { 
-                const bx = -Math.sign(g.lastDir.x||g.vx), by = -Math.sign(g.lastDir.y||g.vy); 
-                const noBack = valid.filter(d => d.x!==bx || d.y!==by); if(noBack.length > 0) valid = noBack; 
-            }
+            if (!stuck && valid.length > 1) { const bx = -Math.sign(g.lastDir.x||g.vx), by = -Math.sign(g.lastDir.y||g.vy); const noBack = valid.filter(d => d.x!==bx || d.y!==by); if(noBack.length > 0) valid = noBack; }
             if (valid.length > 0) {
                 if (target) {
-                    valid.sort((a, b) => { 
-                        const da = ((gx+a.x)*TILE_SIZE-target.x)**2 + ((gy+a.y)*TILE_SIZE-target.y)**2; 
-                        const db = ((gx+b.x)*TILE_SIZE-target.x)**2 + ((gy+b.y)*TILE_SIZE-target.y)**2; 
-                        return game.frightenedTimer > 0 ? db - da : da - db; 
-                    });
+                    valid.sort((a, b) => { const da = ((gx+a.x)*TILE_SIZE-target.x)**2 + ((gy+a.y)*TILE_SIZE-target.y)**2; const db = ((gx+b.x)*TILE_SIZE-target.x)**2 + ((gy+b.y)*TILE_SIZE-target.y)**2; return game.frightenedTimer > 0 ? db - da : da - db; });
                 } else valid.sort(()=>Math.random()-0.5);
                 const best = valid[0]; g.vx = best.x * speed; g.vy = best.y * speed; g.lastDir = {x: best.x, y: best.y};
             } else { g.vx = 0; g.vy = 0; }
         }
         g.x += g.vx; g.y += g.vy;
-        for(let pid in game.players) {
+        const pIds = Object.keys(game.players);
+        for(const pid of pIds) {
             const p = game.players[pid];
             if(p.alive && p.deathTimer === 0 && Math.abs(p.x-g.x)<20 && Math.abs(p.y-g.y)<20) {
                 if(game.frightenedTimer > 0) { p.score += 200; p.stats.ghosts++; g.dead = true; io.to(game.id).emit('sfx', 'eatGhost'); io.to(game.id).emit('popup', {x: g.x, y: g.y, text: "+200"}); }
@@ -568,38 +505,24 @@ function updateGamePhysics(game) {
 function loseLife(game, p) {
     if (p.deathTimer > 0) return; 
     p.deathTimer = DEATH_ANIMATION_FRAMES; p.vx = 0; p.vy = 0; io.to(game.id).emit('sfx', 'death');
+    // Removed particle emission
 }
 
 function finalizeDeath(game, p) {
     p.lives--;
     if(p.lives > 0) {
-        let spawnFound = false;
-        let attempts = 0;
-        
+        let spawnFound = false, attempts = 0;
         while (!spawnFound && attempts < 50) {
             attempts++;
             const rx = Math.floor(Math.random() * 16) + 2; 
             const ry = Math.floor((game.cameraY + 200 + Math.random() * 400) / TILE_SIZE);
-            
             if (getTile(game, rx, ry) !== TILE.WALL) {
-                const px = rx * TILE_SIZE;
-                const py = ry * TILE_SIZE;
-                let safe = true;
-                for (let g of game.ghosts) {
-                    const dist = Math.sqrt(Math.pow(g.x - px, 2) + Math.pow(g.y - py, 2));
-                    if (dist < 3 * TILE_SIZE) { safe = false; break; }
-                }
+                const px = rx * TILE_SIZE; const py = ry * TILE_SIZE; let safe = true;
+                for (let g of game.ghosts) { const dist = Math.sqrt(Math.pow(g.x - px, 2) + Math.pow(g.y - py, 2)); if (dist < 3 * TILE_SIZE) { safe = false; break; } }
                 if (safe) { p.x = px; p.y = py; spawnFound = true; }
             }
         }
-        
-        if (!spawnFound) {
-            const cy = Math.floor((game.cameraY + 400) / TILE_SIZE); 
-            let foundX = 10;
-            for(let x=2; x<MAP_WIDTH-2; x++) if(getTile(game, x, cy) !== TILE.WALL) { foundX = x; break; } 
-            p.x = foundX * TILE_SIZE; p.y = cy * TILE_SIZE;
-        }
-
+        if (!spawnFound) { const cy = Math.floor((game.cameraY + 400) / TILE_SIZE); let foundX = 10; for(let x=2; x<MAP_WIDTH-2; x++) if(getTile(game, x, cy) !== TILE.WALL) { foundX = x; break; } p.x = foundX * TILE_SIZE; p.y = cy * TILE_SIZE; }
         p.vx = 0; p.vy = 0; p.invulnTimer = 120; p.pvpTimer = 0; p.deathTimer = 0; 
         game.gameSpeed = Math.max(CAM_SPEED_START, game.gameSpeed * 0.7);
     } else { 
@@ -608,14 +531,7 @@ function finalizeDeath(game, p) {
         const matchResults = Object.values(game.players).sort((a,b) => b.score - a.score);
         const anyAlive = Object.values(game.players).some(pl => pl.alive);
         const allDead = !anyAlive;
-
-        io.to(p.id).emit('gameOver', {
-            score: p.score,
-            stats: p.stats,
-            leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})),
-            allDead: allDead
-        });
-
+        io.to(p.id).emit('gameOver', { score: p.score, stats: p.stats, leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})), allDead: allDead });
         if (allDead) io.to(game.id).emit('matchEnded');
     }
 }

@@ -2,13 +2,26 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pac-Royale Battle</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; background: #050505; color: white; font-family: 'Press Start 2P'; display: flex; flex-direction: row; align-items: flex-start; justify-content: center; height: 100vh; user-select: none; overflow: hidden; padding-top: 40px; }
-        .ui-column { display: flex; flex-direction: column; gap: 20px; justify-content: flex-start; height: 100%; margin: 0 15px; }
-        .side-panel { width: 120px; height: 160px; background: #000; border: 4px solid var(--p-color); padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; opacity: 0.3; transition: opacity 0.3s, transform 0.2s, box-shadow 0.2s; box-shadow: 6px 6px 0px color-mix(in srgb, var(--p-color), black 50%); position: relative; }
+        body { 
+            margin: 0; background: #050505; color: white; font-family: 'Press Start 2P'; 
+            display: flex; flex-direction: row; align-items: flex-start; justify-content: center; 
+            height: 100vh; width: 100vw; overflow: hidden; 
+            user-select: none; touch-action: none; overscroll-behavior: none; position: fixed;
+        }
+        
+        .ui-column { display: flex; flex-direction: column; gap: 20px; justify-content: flex-start; height: 100%; margin: 0 15px; padding-top: 40px; }
+        
+        .side-panel { 
+            width: 120px; height: 160px; background: #000; border: 4px solid var(--p-color); 
+            padding: 10px; display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; text-align: center; opacity: 0.3; 
+            transition: opacity 0.3s, transform 0.2s, box-shadow 0.2s; 
+            box-shadow: 6px 6px 0px color-mix(in srgb, var(--p-color), black 50%); position: relative; 
+        }
         .side-panel.active { opacity: 1; transform: translate(-2px, -2px); box-shadow: 8px 8px 0px color-mix(in srgb, var(--p-color), black 50%); }
         .pac-avatar { width: 40px; height: 40px; border-radius: 50%; margin-bottom: 15px; background: conic-gradient(transparent 30deg, var(--p-color) 30deg 330deg, transparent 330deg); transform: rotate(90deg); border: none; box-shadow: none; }
         .pac-avatar::after { display: none; }
@@ -16,8 +29,15 @@
         .stat-label { font-size: 7px; color: #888; margin-top: 10px; margin-bottom: 5px; letter-spacing: 1px; }
         .score-box { font-size: 10px; color: #fff; }
         .lives-box { color: #ff3333; letter-spacing: 2px; font-size: 12px; margin-top: 5px; }
-        canvas { border: 6px solid #1919A6; background: black; image-rendering: pixelated; box-shadow: 0 0 40px rgba(25,25,166,0.4); display: none; max-height: calc(100vh - 60px); }
-        .screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: #000; padding: 40px; border: 4px solid #ffcc00; z-index: 100; min-width: 550px; box-shadow: 10px 10px 0px rgba(0,0,0,0.8); display: none; }
+        
+        canvas { 
+            border: 6px solid #1919A6; background: black; image-rendering: pixelated; 
+            box-shadow: 0 0 40px rgba(25,25,166,0.4); display: none; 
+            max-height: calc(100vh - 20px); width: 100%; max-width: 600px; aspect-ratio: 3/4;
+            margin-top: 20px;
+        }
+
+        .screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: #000; padding: 40px; border: 4px solid #ffcc00; z-index: 100; min-width: 300px; max-width: 90%; box-shadow: 10px 10px 0px rgba(0,0,0,0.8); display: none; box-sizing: border-box; }
         .visible { display: block !important; }
         #countdown-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 100px; color: #ffcc00; text-shadow: 5px 5px 0 #000; z-index: 50; pointer-events: none; display: none; }
         button { background: #ffcc00; padding: 15px; font-family: inherit; cursor: pointer; border: 2px solid white; margin-top: 15px; text-transform: uppercase; box-shadow: 4px 4px 0 #b8860b; width: 100%; font-weight: bold; font-size: 12px; box-sizing: border-box; }
@@ -29,12 +49,12 @@
         .menu-col { display: flex; flex-direction: column; gap: 10px; justify-content: space-between; }
         .menu-divider { background: #333; height: 100%; min-height: 150px; }
         .menu-label { font-size: 10px; color: #888; margin-bottom: 5px; text-align: center; }
-        .lobby-container { display: flex; gap: 15px; justify-content: center; margin: 30px 0; }
-        .lobby-slot { width: 100px; height: 140px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        .lobby-container { display: flex; gap: 15px; justify-content: center; margin: 30px 0; flex-wrap: wrap; }
+        .lobby-slot { width: 80px; height: 120px; border: 4px solid #333; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
         .lobby-slot.filled { border-color: #fff; background: #111; }
         .slot-label { font-size: 8px; color: #666; position: absolute; top: 5px; }
         .slot-name { font-size: 10px; color: #fff; margin-top: 10px; word-break: break-all; }
-        .slot-pacman { width: 50px; height: 50px; border-radius: 50%; position: relative; background: conic-gradient(transparent 30deg, var(--slot-color) 30deg 330deg, transparent 330deg); transform: rotate(90deg); box-shadow: none; }
+        .slot-pacman { width: 40px; height: 40px; border-radius: 50%; position: relative; background: conic-gradient(transparent 30deg, var(--slot-color) 30deg 330deg, transparent 330deg); transform: rotate(90deg); box-shadow: none; }
         .slot-pacman::after { display: none; }
         .waiting-anim { font-size: 8px; color: #444; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0; } }
@@ -50,47 +70,68 @@
         .stat-item { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 10px; color: #aaa; width: 60px; }
         .icon-svg { width: 30px; height: 30px; display: block; }
         
-        .game-over-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 30px; }
+        .game-over-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
         .btn-spectate { background: #555; border-color: #777; color: white; }
         .btn-play-again { background: #00FF00; color: black; border-color: #fff; }
         .btn-main-menu { background: #FF0000; color: white; border-color: #fff; }
 
         #spectator-menu-btn { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); width: auto; margin: 0; padding: 12px 25px; background: rgba(0, 0, 0, 0.8); color: #FFD700; border: 2px solid #FFD700; box-shadow: 0 0 10px rgba(0,0,0,0.5); font-size: 12px; z-index: 150; border-radius: 4px; }
-        #spectator-menu-btn:hover { background: #FFD700; color: #000; transform: translate(-50%, -2px); box-shadow: 0 4px 0 #b8860b; }
-        #spectator-menu-btn:active { transform: translate(-50%, 1px); box-shadow: 0 1px 0 #b8860b; }
-
+        
         .color-picker { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
         .color-swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #333; cursor: pointer; transition: transform 0.1s; }
         .color-swatch:hover { transform: scale(1.2); border-color: #fff; }
         .color-swatch.disabled { opacity: 0.2; cursor: not-allowed; transform: none; border-color: #333; }
 
-        /* UPDATED MUTE BUTTON (WITHOUT YELLOW SHADOW) */
-        #mute-btn {
-            position: fixed;
-            bottom: 40px;
-            left: calc(50% + 330px);
-            background: transparent;
-            color: #555;
-            border: none;
-            opacity: 0.3;
-            box-shadow: none !important; 
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            font-size: 24px;
-            padding: 0;
-            display: none;
-            z-index: 200;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            outline: none; 
-        }
-        #mute-btn:hover { 
-            color: white;
-            opacity: 1;
-            transform: scale(1.1);
-            text-shadow: 0 0 5px #fff; 
+        #mute-btn { position: fixed; bottom: 40px; right: 20px; background: transparent; color: #555; border: none; opacity: 0.5; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; padding: 0; display: none; z-index: 200; align-items: center; justify-content: center; outline: none; box-shadow: none;}
+        #mute-btn:hover { color: white; opacity: 1; transform: scale(1.1); text-shadow: 0 0 5px #fff; }
+
+        /* --- MOBILE LAYOUT TRANSFORMATION --- */
+        @media (max-width: 900px) {
+            body { 
+                flex-direction: column; 
+                justify-content: flex-start;
+                padding-top: 5px;
+            }
+
+            .ui-column { 
+                flex-direction: row; 
+                width: 100%; 
+                height: auto; 
+                padding: 0;
+                margin: 0;
+                justify-content: center;
+                gap: 5px;
+                order: 1; /* Place UI above canvas */
+            }
+
+            /* Adjust second column to follow */
+            .ui-column:nth-of-type(3) { order: 2; } 
+            
+            canvas { 
+                order: 3; 
+                flex-grow: 1; 
+                margin-top: 5px; 
+                max-height: none; 
+                height: auto; 
+                border-width: 2px;
+            }
+
+            .side-panel {
+                width: 50px;
+                height: 60px;
+                padding: 2px;
+                border-width: 2px;
+                box-shadow: none;
+            }
+            .side-panel.active { transform: none; box-shadow: 0 0 5px var(--p-color); }
+            
+            .pac-avatar { display: none; } /* Hide avatar to save space */
+            .player-name-ui { font-size: 8px; margin-bottom: 2px; }
+            .stat-label { display: none; } /* Hide labels "SCORE", "LIVES" */
+            .score-box { font-size: 8px; margin-bottom: 2px; }
+            .lives-box { font-size: 8px; letter-spacing: 0; }
+            
+            #mute-btn { top: 10px; right: 10px; bottom: auto; width: 30px; height: 30px; font-size: 16px; }
         }
     </style>
 </head>
@@ -112,10 +153,9 @@
         <div id="menu-error" class="error-msg"></div>
         <button style="background: #444; border-color: #666; margin-top:30px; width:auto;" onclick="backToIntro(); uiClick()">BACK</button>
     </div>
-    <div id="lobby-screen" class="screen" style="min-width: 600px;">
+    <div id="lobby-screen" class="screen" style="min-width: 600px; max-width: 95vw;">
         <h2 style="font-size:16px; color:#aaa;">LOBBY ROOM</h2>
         <div class="lobby-code" id="lobby-code-display" onclick="copyLink(); uiClick()">CODE: ????</div>
-        
         <div style="margin-top: 10px; font-size: 10px; color: #ccc;">CHOOSE COLOR:</div>
         <div class="color-picker" id="color-picker-container">
             <div class="color-swatch" data-idx="0" style="background: #FFFF00;" onclick="selectColor(0)"></div>
@@ -123,7 +163,6 @@
             <div class="color-swatch" data-idx="2" style="background: #BF00FF;" onclick="selectColor(2)"></div>
             <div class="color-swatch" data-idx="3" style="background: #0055FF;" onclick="selectColor(3)"></div>
         </div>
-
         <div class="lobby-container">
             <div class="lobby-slot" id="slot-0"><div class="slot-label">PLAYER 1</div><div class="waiting-anim">WAITING...</div></div>
             <div class="lobby-slot" id="slot-1"><div class="slot-label">PLAYER 2</div><div class="waiting-anim">WAITING...</div></div>
@@ -137,35 +176,25 @@
     <div id="countdown-display">3</div>
     
     <div class="ui-column">
-        <div class="side-panel" id="p0" style="--p-color:#FFFF00;">
-            <div class="pac-avatar"></div><div class="player-name-ui" id="n0">P1</div><div class="stat-label">SCORE</div><div class="score-box" id="s0">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l0">❤️❤️❤️</div>
-        </div>
-        <div class="side-panel" id="p2" style="--p-color:#00FFFF;">
-            <div class="pac-avatar"></div><div class="player-name-ui" id="n2">P3</div><div class="stat-label">SCORE</div><div class="score-box" id="s2">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l2">❤️❤️❤️</div>
-        </div>
+        <div class="side-panel" id="p0" style="--p-color:#FFFF00;"><div class="pac-avatar"></div><div class="player-name-ui" id="n0">P1</div><div class="stat-label">SCORE</div><div class="score-box" id="s0">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l0">❤️❤️❤️</div></div>
+        <div class="side-panel" id="p2" style="--p-color:#00FFFF;"><div class="pac-avatar"></div><div class="player-name-ui" id="n2">P3</div><div class="stat-label">SCORE</div><div class="score-box" id="s2">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l2">❤️❤️❤️</div></div>
     </div>
     
     <canvas id="gameCanvas" width="600" height="800"></canvas>
     
     <div class="ui-column">
-        <div class="side-panel" id="p1" style="--p-color:#00FF00;">
-            <div class="pac-avatar"></div><div class="player-name-ui" id="n1">P2</div><div class="stat-label">SCORE</div><div class="score-box" id="s1">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l1">❤️❤️❤️</div>
-        </div>
-        <div class="side-panel" id="p3" style="--p-color:#FF00FF;">
-            <div class="pac-avatar"></div><div class="player-name-ui" id="n3">P4</div><div class="stat-label">SCORE</div><div class="score-box" id="s3">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l3">❤️❤️❤️</div>
-        </div>
+        <div class="side-panel" id="p1" style="--p-color:#00FF00;"><div class="pac-avatar"></div><div class="player-name-ui" id="n1">P2</div><div class="stat-label">SCORE</div><div class="score-box" id="s1">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l1">❤️❤️❤️</div></div>
+        <div class="side-panel" id="p3" style="--p-color:#FF00FF;"><div class="pac-avatar"></div><div class="player-name-ui" id="n3">P4</div><div class="stat-label">SCORE</div><div class="score-box" id="s3">0</div><div class="stat-label">LIVES</div><div class="lives-box" id="l3">❤️❤️❤️</div></div>
     </div>
     
     <button id="mute-btn" onclick="toggleMute()">🔊</button>
-
-    <div id="game-over" class="screen" style="min-width: 600px;">
+    <div id="game-over" class="screen" style="min-width: 600px; max-width: 90vw;">
         <h1 style="color:red; margin-bottom: 10px;">GAME OVER</h1>
         <p id="final-score" style="color:white; font-size:14px; margin:5px 0;"></p>
         <div id="match-results-container"></div>
         <div id="match-stats-container" class="match-stats"></div>
         <div class="game-over-buttons" id="go-buttons"></div>
     </div>
-    
     <div id="host-left-screen" class="screen" style="z-index:200;"><h1 style="color:red;">ROOM CLOSED</h1><button onclick="location.reload()" style="width: 200px; margin: 0 auto;">MENU</button></div>
     <button id="spectator-menu-btn" onclick="reopenGameOver(); uiClick()">SCORE</button>
 
@@ -176,26 +205,57 @@
         const ctx = canvas.getContext('2d');
         const TILE_SIZE = 30;
         const urlParams = new URLSearchParams(window.location.search);
-        
         const PLAYER_COLORS = ['#FFFF00', '#00FF00', '#BF00FF', '#0055FF'];
-
-        let isJoined = false;
-        let isSpectating = false; 
+        let isJoined = false, isSpectating = false;
         let popups = [];
         let prevScore = 0;
         let lastAngles = {};
         let leaderboardData = []; 
         let deathZoneY = 1000;
-        
         let localRows = {}; 
         let currState = null;
 
         window.onload = () => {
             const savedNick = localStorage.getItem('pac_royale_nickname');
-            if (savedNick) {
-                document.getElementById('nickname').value = savedNick;
-            }
+            if (savedNick) document.getElementById('nickname').value = savedNick;
+            document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
         };
+
+        // --- SWIPE CONTROL LOGIC ---
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: false});
+
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault(); // Prevent scrolling
+        }, {passive: false});
+
+        document.addEventListener('touchend', function(e) {
+            const touchEndX = e.changedTouches[0].screenX;
+            const touchEndY = e.changedTouches[0].screenY;
+            handleSwipe(touchEndX, touchEndY);
+        }, {passive: false});
+
+        function handleSwipe(endX, endY) {
+            if(!isJoined) return;
+            const diffX = endX - touchStartX;
+            const diffY = endY - touchStartY;
+            const threshold = 30; 
+
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (Math.abs(diffX) > threshold) {
+                    sendInput({x: diffX > 0 ? 1 : -1, y: 0});
+                }
+            } else {
+                if (Math.abs(diffY) > threshold) {
+                    sendInput({x: 0, y: diffY > 0 ? 1 : -1});
+                }
+            }
+        }
 
         if(urlParams.has('code')) {
             document.getElementById('lobby-code-input').value = urlParams.get('code');
@@ -209,19 +269,10 @@
                 this.masterGain = this.ctx.createGain(); 
                 this.masterGain.gain.value = 0.15; 
                 this.masterGain.connect(this.ctx.destination); 
-                this.sirenOsc = null; 
-                this.isMuted = false;
+                this.isMuted = false; this.sirenOsc = null; 
             }
             resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
-            toggleMute() {
-                this.isMuted = !this.isMuted;
-                if (this.isMuted) {
-                    this.masterGain.gain.setValueAtTime(0, this.ctx.currentTime);
-                } else {
-                    this.masterGain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-                }
-                return this.isMuted;
-            }
+            toggleMute() { this.isMuted = !this.isMuted; this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : 0.15, this.ctx.currentTime); return this.isMuted; }
             createSoftOsc(type, freq, t) { if(this.isMuted) return {osc:{start:()=>{},stop:()=>{},connect:()=>{}}, gain:{gain:{setValueAtTime:()=>{},exponentialRampToValueAtTime:()=>{},linearRampToValueAtTime:()=>{}}}}; const o=this.ctx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const f=this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1000; const g=this.ctx.createGain(); o.connect(f); f.connect(g); g.connect(this.masterGain); return {osc:o, gain:g}; }
             playClick() { if(this.isMuted) return; const t=this.ctx.currentTime; const {osc,gain}=this.createSoftOsc('square',800,t); gain.gain.setValueAtTime(0.1,t); gain.gain.exponentialRampToValueAtTime(0.01,t+0.1); osc.start(t); osc.stop(t+0.1); }
             playWaka() { if(this.isMuted) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.linearRampToValueAtTime(50,t+0.15); const g=this.ctx.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.8,t+0.02); g.gain.linearRampToValueAtTime(0,t+0.15); o.connect(g); g.connect(this.masterGain); o.start(t); o.stop(t+0.15); }
@@ -238,30 +289,14 @@
         }
         const synth = new PacmanSynth();
 
-        function toggleMute() {
-            const isMuted = synth.toggleMute();
-            const btn = document.getElementById('mute-btn');
-            btn.innerText = isMuted ? '🔇' : '🔊';
-            canvas.focus(); 
-        }
-
+        function toggleMute() { const isMuted = synth.toggleMute(); document.getElementById('mute-btn').innerText = isMuted ? '🔇' : '🔊'; canvas.focus(); }
         function uiClick() { synth.resume(); synth.playClick(); }
         function enterMenu() { synth.resume(); synth.playClick(); document.getElementById('intro-screen').classList.remove('visible'); document.getElementById('menu-screen').classList.add('visible'); }
         function backToIntro() { document.getElementById('menu-screen').classList.remove('visible'); document.getElementById('intro-screen').classList.add('visible'); synth.stopSiren(); }
         function getNick() { return document.getElementById('nickname').value.trim() || "PLAYER"; }
-        
-        function saveNick() {
-            const nick = getNick();
-            localStorage.setItem('pac_royale_nickname', nick);
-        }
-
+        function saveNick() { localStorage.setItem('pac_royale_nickname', getNick()); }
         function createLobby() { saveNick(); socket.emit('createLobby', { nickname: getNick() }); }
-        function joinLobby() { 
-            const c = document.getElementById('lobby-code-input').value.trim(); 
-            if(!c) { showErr('ENTER CODE'); return; } 
-            saveNick();
-            socket.emit('joinLobby', { code: c, nickname: getNick() }); 
-        }
+        function joinLobby() { const c = document.getElementById('lobby-code-input').value.trim(); if(!c) { showErr('ENTER CODE'); return; } saveNick(); socket.emit('joinLobby', { code: c, nickname: getNick() }); }
         function startGame() { socket.emit('startGame'); }
         function showErr(msg) { document.getElementById('menu-error').innerText = msg; }
         function copyLink() { navigator.clipboard.writeText(window.location.origin + "/?code=" + document.getElementById('lobby-code-display').innerText.split(': ')[1]); alert("Link copied!"); }
@@ -271,55 +306,23 @@
         function renderLobbySlots(players) { 
             for(let i=0; i<4; i++) { const s=document.getElementById(`slot-${i}`); s.className='lobby-slot'; s.innerHTML=`<div class="slot-label">PLAYER ${i+1}</div><div class="waiting-anim">WAITING...</div>`; } 
             players.forEach(p => { const s=document.getElementById(`slot-${p.colorIdx}`); if(s) { s.classList.add('filled'); s.innerHTML=`<div class="slot-label" style="color:${p.color}">PLAYER ${p.colorIdx+1}</div><div class="slot-pacman" style="--slot-color:${p.color};"></div><div class="slot-name">${p.name}</div>`; } }); 
-            
-            const usedColors = players.map(p => p.color);
-            document.querySelectorAll('.color-swatch').forEach((el, idx) => {
-                const myColor = PLAYER_COLORS[idx];
-                const takenByOthers = players.some(p => p.color === myColor && p.id !== socket.id);
-                if (takenByOthers) { el.classList.add('disabled'); el.onclick = null; } 
-                else { el.classList.remove('disabled'); el.onclick = () => selectColor(idx); }
-            });
+            document.querySelectorAll('.color-swatch').forEach((el, idx) => { const myColor = PLAYER_COLORS[idx], taken = players.some(p => p.color === myColor && p.id !== socket.id); if (taken) { el.classList.add('disabled'); el.onclick = null; } else { el.classList.remove('disabled'); el.onclick = () => selectColor(idx); } });
         }
         
-        function selectColor(index) {
-            socket.emit('changeColor', index);
-            uiClick();
-        }
-
+        function selectColor(index) { socket.emit('changeColor', index); uiClick(); }
         function closeGameOver() { document.getElementById('game-over').classList.remove('visible'); document.getElementById('spectator-menu-btn').style.display = 'block'; }
         function reopenGameOver() { document.getElementById('game-over').classList.add('visible'); document.getElementById('spectator-menu-btn').style.display = 'none'; }
         function hideSpectatorBtn() { document.getElementById('spectator-menu-btn').style.display = 'none'; }
-        
-        function returnToLobby() {
-            socket.emit('returnToLobby');
-            uiClick();
-        }
+        function returnToLobby() { socket.emit('returnToLobby'); uiClick(); }
 
-        socket.on('lobbyUpdate', d => { 
-            hideSpectatorBtn(); 
-            document.getElementById('game-over').classList.remove('visible');
-            document.getElementById('menu-screen').classList.remove('visible'); 
-            document.getElementById('lobby-screen').classList.add('visible'); 
-            canvas.style.display = 'none'; 
-            document.getElementById('mute-btn').style.display = 'none'; // Hide mute button in lobby
-            document.getElementById('lobby-code-display').innerText = `CODE: ${d.roomId}`; 
-            renderLobbySlots(d.players); 
-            if(socket.id === d.hostId) { document.getElementById('start-game-btn').style.display = 'block'; document.getElementById('waiting-msg').style.display = 'none'; } 
-            else { document.getElementById('start-game-btn').style.display = 'none'; document.getElementById('waiting-msg').style.display = 'block'; } 
-        });
-
+        socket.on('lobbyUpdate', d => { hideSpectatorBtn(); document.getElementById('game-over').classList.remove('visible'); document.getElementById('menu-screen').classList.remove('visible'); document.getElementById('lobby-screen').classList.add('visible'); canvas.style.display = 'none'; document.getElementById('mute-btn').style.display = 'none'; document.getElementById('lobby-code-display').innerText = `CODE: ${d.roomId}`; renderLobbySlots(d.players); if(socket.id === d.hostId) { document.getElementById('start-game-btn').style.display = 'block'; document.getElementById('waiting-msg').style.display = 'none'; } else { document.getElementById('start-game-btn').style.display = 'none'; document.getElementById('waiting-msg').style.display = 'block'; } });
         socket.on('errorMsg', msg => showErr(msg));
         socket.on('roomClosed', () => { hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); document.getElementById('host-left-screen').classList.add('visible'); synth.stopSiren(); });
         
         socket.on('gameStarted', () => { 
-            hideSpectatorBtn(); 
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); 
-            canvas.style.display = 'block'; 
-            document.getElementById('mute-btn').style.display = 'flex'; // Show mute button
-            isJoined = true; 
-            isSpectating = false; 
-            synth.resume();
-            synth.playIntro(); 
+            hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); 
+            canvas.style.display = 'block'; document.getElementById('mute-btn').style.display = 'flex'; 
+            isJoined = true; isSpectating = false; synth.resume(); synth.playIntro(); 
             setTimeout(() => { if(isJoined) synth.startSiren('normal'); }, 4000); 
             requestAnimationFrame(renderLoop); 
         });
@@ -338,46 +341,40 @@
         }
 
         socket.on('gameOver', data => { 
-            document.getElementById('game-over').classList.add('visible'); 
-            document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
-            isJoined = false; isSpectating = true; hideSpectatorBtn(); 
-            document.getElementById('mute-btn').style.display = 'none'; // Hide mute button on game over
-            
+            document.getElementById('game-over').classList.add('visible'); document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
+            isJoined = false; isSpectating = true; hideSpectatorBtn(); document.getElementById('mute-btn').style.display = 'none';
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
             const evilSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><circle cx="15" cy="15" r="10" fill="#9900ff"/><circle cx="11" cy="13" r="2" fill="white"/><circle cx="19" cy="13" r="2" fill="white"/><path d="M11,19 L19,19" stroke="black" stroke-width="1"/></svg>`;
-            // ИСПРАВЛЕНО: Вишенка 20px (было 30px)
             const cherryIcon = '<span style="font-size:20px">🍒</span>';
-            
             document.getElementById('match-stats-container').innerHTML = `<div class="stat-item">${cherryIcon}x${data.stats.cherries}</div><div class="stat-item">${ghostSVG}x${data.stats.ghosts}</div><div class="stat-item">${pacSVG}x${data.stats.players}</div><div class="stat-item">${evilSVG}x${data.stats.evil}</div>`;
-            
-            // НОВЫЕ КНОПКИ
             const btnState = data.allDead ? '' : 'disabled style="background:#555; cursor:not-allowed;"';
             const btnText = data.allDead ? 'PLAY AGAIN 🏠' : 'WAITING...';
-            
-            document.getElementById('go-buttons').innerHTML = `
-                <button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!data.leaderboard.some(p=>p.alive)?'disabled':''}>SPECTATE 👁️</button>
-                <button id="btn-replay" class="btn-play-again" onclick="returnToLobby()" ${btnState}>${btnText}</button>
-                <button class="btn-main-menu" onclick="location.reload()">MAIN MENU 🔙</button>
-            `;
-            
-            const po={}; data.leaderboard.forEach(p=>po[p.name]=p); updateLeaderboardHTML(po); 
-            synth.stopSiren(); 
+            document.getElementById('go-buttons').innerHTML = `<button class="btn-spectate" onclick="closeGameOver(); uiClick()" ${!data.leaderboard.some(p=>p.alive)?'disabled':''}>SPECTATE 👁️</button><button id="btn-replay" class="btn-play-again" onclick="returnToLobby()" ${btnState}>${btnText}</button><button class="btn-main-menu" onclick="location.reload()">MAIN MENU 🔙</button>`;
+            const po={}; data.leaderboard.forEach(p=>po[p.name]=p); updateLeaderboardHTML(po); synth.stopSiren(); 
         });
 
-        socket.on('matchEnded', () => {
-            const btn = document.getElementById('btn-replay');
-            if(btn) {
-                btn.disabled = false;
-                btn.style.background = '#00FF00';
-                btn.style.cursor = 'pointer';
-                btn.innerText = 'PLAY AGAIN 🏠';
-            }
-            synth.stopAll(); 
-        });
-
+        socket.on('matchEnded', () => { const btn = document.getElementById('btn-replay'); if(btn) { btn.disabled = false; btn.style.background = '#00FF00'; btn.style.cursor = 'pointer'; btn.innerText = 'PLAY AGAIN 🏠'; } synth.stopAll(); });
         socket.on('leaderboardUpdate', d => leaderboardData = d);
-        document.addEventListener('keydown', e => { if(!isJoined) return; let d=null; if(e.code==='ArrowUp'||e.code==='KeyW') { d={x:0,y:-1}; e.preventDefault(); } if(e.code==='ArrowDown'||e.code==='KeyS') { d={x:0,y:1}; e.preventDefault(); } if(e.code==='ArrowLeft'||e.code==='KeyA') { d={x:-1,y:0}; e.preventDefault(); } if(e.code==='ArrowRight'||e.code==='KeyD') { d={x:1,y:0}; e.preventDefault(); } if(d) socket.emit('input', d); });
+        
+        let lastInputTime = 0;
+        function sendInput(d, e) {
+            if(e) e.preventDefault();
+            if(!isJoined) return;
+            const now = Date.now();
+            if (now - lastInputTime < 50) return; // Debounce 50ms
+            lastInputTime = now;
+            socket.emit('input', d);
+        }
+
+        document.addEventListener('keydown', e => { 
+            let d=null; 
+            if(e.code==='ArrowUp'||e.code==='KeyW') d={x:0,y:-1}; 
+            if(e.code==='ArrowDown'||e.code==='KeyS') d={x:0,y:1}; 
+            if(e.code==='ArrowLeft'||e.code==='KeyA') d={x:-1,y:0}; 
+            if(e.code==='ArrowRight'||e.code==='KeyD') d={x:1,y:0}; 
+            if(d) sendInput(d); 
+        });
 
         socket.on('state', s => {
             if(s.changes) { Object.assign(localRows, s.changes.newRows); s.changes.removedDots.forEach(pt => { if(localRows[pt.y]) localRows[pt.y][pt.x] = 0; }); const cy = Math.floor(s.camY / TILE_SIZE); for(let k in localRows) { if(parseInt(k) > cy + 50) delete localRows[k]; } }
@@ -387,7 +384,6 @@
 
         let visualPlayers = {}, visualGhosts = [], visualCamY = 0;
         let lastTime = Date.now();
-
         function lerp(start, end, t) { return start * (1 - t) + end * t; }
 
         function renderLoop() {
@@ -434,11 +430,7 @@
                     } else if (t === 2) { ctx.fillStyle = '#ffb8ae'; ctx.fillRect(sx+13, sy+13, 4, 4);
                     } else if (t === 3) { ctx.fillStyle = (now%400 < 200) ? '#fff' : '#ffb8ae'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill();
                     } else if (t === 4) { ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(sx+15, sy+18, 6, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#00ff00'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+15, sy+18); ctx.quadraticCurveTo(sx+20, sy+10, sx+22, sy+8); ctx.stroke();
-                    } else if (t === 5) { 
-                        // EVIL (RED)
-                        ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); 
-                        ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); 
-                        ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
+                    } else if (t === 5) { ctx.fillStyle = '#FF0000'; ctx.beginPath(); ctx.arc(sx+15, sy+15, 8, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(sx+12, sy+13, 2, 0, Math.PI*2); ctx.arc(sx+18, sy+13, 2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = 'black'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(sx+12, sy+18); ctx.lineTo(sx+18, sy+18); ctx.stroke();
                     } else if (t === 6) { ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(sx+15, sy+10); ctx.bezierCurveTo(sx+15, sy+8, sx+12, sy+5, sx+8, sy+5); ctx.bezierCurveTo(sx+2, sy+5, sx+2, sy+14, sx+15, sy+22); ctx.bezierCurveTo(sx+28, sy+14, sx+28, sy+5, sx+22, sy+5); ctx.bezierCurveTo(sx+18, sy+5, sx+15, sy+8, sx+15, sy+10); ctx.fill(); }
                 }
             }
@@ -446,38 +438,24 @@
             if (s.warnings) s.warnings.forEach(w => drawWarning(ctx, w.x, w.y - visualCamY));
             if (s.rockets) s.rockets.forEach(r => drawGhost(ctx, r.x, r.y - visualCamY, r.color, 0, -1, 0)); 
             
-            // --- GHOSTS ---
             if(s.ghosts) {
                 if(visualGhosts.length !== s.ghosts.length) visualGhosts = s.ghosts.map(g => ({x: g.x, y: g.y})); 
                 s.ghosts.forEach((g, i) => {
                     if(!visualGhosts[i]) visualGhosts[i] = {x: g.x, y: g.y};
-                    visualGhosts[i].x += g.vx * dt;
-                    visualGhosts[i].y += g.vy * dt;
                     visualGhosts[i].x = lerp(visualGhosts[i].x, g.x, 5 * dt);
                     visualGhosts[i].y = lerp(visualGhosts[i].y, g.y, 5 * dt);
                     drawGhost(ctx, visualGhosts[i].x, visualGhosts[i].y - visualCamY, g.color, g.vx, g.vy, s.ft);
                 });
             }
 
-            // --- PLAYERS ---
             for(let i=0; i<4; i++) document.getElementById(`p${i}`).classList.remove('active');
             for(let id in s.players) {
                 const p = s.players[id];
                 if(!visualPlayers[id]) visualPlayers[id] = {x: p.x, y: p.y};
-
                 const panel = document.getElementById(`p${p.colorIdx}`);
-                if(panel) { 
-                    panel.style.setProperty('--p-color', p.color);
-                    panel.classList.add('active'); 
-                    document.getElementById(`n${p.colorIdx}`).innerText = p.name; 
-                    document.getElementById(`s${p.colorIdx}`).innerText = p.score; 
-                    document.getElementById(`l${p.colorIdx}`).innerText = p.alive ? "❤️".repeat(p.lives) : "DEAD"; 
-                }
+                if(panel) { panel.style.setProperty('--p-color', p.color); panel.classList.add('active'); document.getElementById(`n${p.colorIdx}`).innerText = p.name; document.getElementById(`s${p.colorIdx}`).innerText = p.score; document.getElementById(`l${p.colorIdx}`).innerText = p.alive ? "❤️".repeat(p.lives) : "DEAD"; }
                 if(p.id === socket.id && p.score > prevScore) { synth.playWaka(); prevScore = p.score; }
                 if(!p.alive) continue;
-                
-                visualPlayers[id].x += p.vx * dt;
-                visualPlayers[id].y += p.vy * dt;
                 
                 const dist = Math.sqrt((visualPlayers[id].x - p.x)**2 + (visualPlayers[id].y - p.y)**2);
                 if (dist > 50) { visualPlayers[id].x = p.x; visualPlayers[id].y = p.y; } 
@@ -486,37 +464,22 @@
                 const ix = visualPlayers[id].x, iy = visualPlayers[id].y, sy = iy - visualCamY;
                 if (p.deathTimer > 0) { const pr = 1 - (p.deathTimer / 60), sa = -Math.PI/2 + (pr * Math.PI), ea = -Math.PI/2 + (2*Math.PI - pr * Math.PI); ctx.fillStyle = p.color; ctx.beginPath(); ctx.moveTo(ix + 15, sy + 15); ctx.arc(ix + 15, sy + 15, 12, sa, ea); ctx.fill(); continue; }
                 if(p.invulnTimer > 0 && now%200 < 100) continue;
-                
                 ctx.fillStyle = (p.pvpTimer > 0) ? '#FF0000' : p.color; 
-                
                 ctx.beginPath();
                 if(p.vx > 0) lastAngles[id] = 0; else if(p.vy > 0) lastAngles[id] = Math.PI/2; else if(p.vx < 0) lastAngles[id] = Math.PI; else if(p.vy < 0) lastAngles[id] = -Math.PI/2;
                 const ang = lastAngles[id] !== undefined ? lastAngles[id] : 0, m = 0.2 + (Math.sin(now/50)+1)/10;
                 ctx.arc(ix+15, sy+15, 12, ang + m*Math.PI, ang + (2-m)*Math.PI); ctx.lineTo(ix+15, sy+15); ctx.fill();
                 ctx.fillStyle = "white"; ctx.font = "8px 'Press Start 2P'"; ctx.textAlign="center"; ctx.fillText(p.name, ix+15, sy-5);
             }
-            
+
             popups = popups.filter(p => p.life > 0);
             popups.forEach(p => { p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - visualCamY); });
-            const ty = canvas.height - 40; if(s.cd > 0) deathZoneY = canvas.height + 100; else deathZoneY += (ty - deathZoneY) * 0.02; 
             
-            const surgeHeight = s.surgeHeight || 0;
-            const visualDeathY = deathZoneY - surgeHeight;
-
-            const tm = now/200; const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
+            const ty = canvas.height - 40; if(s.cd > 0) deathZoneY = canvas.height + 100; else deathZoneY += (ty - deathZoneY) * 0.02; 
+            const surgeHeight = s.surgeHeight || 0; const visualDeathY = deathZoneY - surgeHeight; const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];
             for (let gy = visualDeathY; gy < canvas.height + 60; gy += 30) {
                 const rowIndex = Math.floor(gy / 30);
-                for(let i=-1; i<22; i++) { 
-                    const chaosX = Math.sin(tm + i + rowIndex) * 3;
-                    const chaosY = Math.cos(tm + i * 0.5 + rowIndex) * 3;
-                    
-                    // New hashing formula to prevent clusters
-                    const seed = (i * 137) + (rowIndex * 149);
-                    const rnd = Math.abs(Math.sin(seed) * 10000);
-                    const colorIndex = Math.floor(rnd) % 4;
-                    
-                    drawGhost(ctx, i*30 + chaosX, gy + chaosY, gc[colorIndex], 0, -1, 0); 
-                }
+                for(let i=-1; i<22; i++) { const chaosX = Math.sin(now/200 + i + rowIndex) * 3; const chaosY = Math.cos(now/200 + i * 0.5 + rowIndex) * 3; const seed = (i * 137) + (rowIndex * 149); const rnd = Math.abs(Math.sin(seed) * 10000); const colorIndex = Math.floor(rnd) % 4; drawGhost(ctx, i*30 + chaosX, gy + chaosY, gc[colorIndex], 0, -1, 0); }
             }
             ctx.restore(); 
         }
