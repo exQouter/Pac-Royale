@@ -638,10 +638,22 @@ function updateGamePhysics(game) {
     if (!anyAlive) return;
 
     game.frameCounter++;
-    let speedMult = 1.0;
-    if (game.speedBoostTimer > 0) { game.speedBoostTimer--; speedMult = 1.5; }
+    
+    // --- ИЗМЕНЕНИЕ 1: Разделение скорости игроков и привидений ---
+    let playerSpeedMult = 1.0;
+    let ghostSpeedMult = 1.0;
+
+    if (game.speedBoostTimer > 0) { 
+        game.speedBoostTimer--; 
+        playerSpeedMult = 1.5; // Игрок и камера ускоряются
+        ghostSpeedMult = 0.5;  // Привидения замедляются в 2 раза
+    }
+
     if(game.gameSpeed < CAM_SPEED_MAX) game.gameSpeed += CAM_ACCEL;
-    game.cameraY -= game.gameSpeed * speedMult;
+    
+    // Камера движется со скоростью игрока
+    game.cameraY -= game.gameSpeed * playerSpeedMult;
+    
     handleRocketLogic(game);
     handleSurgeLogic(game); 
     handleTrainLogic(game);
@@ -649,9 +661,11 @@ function updateGamePhysics(game) {
     let ratio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
 
-    const pSpeed = lerp(PLAYER_SPEED_START, PLAYER_SPEED_MAX, ratio) * speedMult;
-    const gSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, ratio) * speedMult;
-    const fSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, ratio) * speedMult;
+    // Применяем разные множители
+    const pSpeed = lerp(PLAYER_SPEED_START, PLAYER_SPEED_MAX, ratio) * playerSpeedMult;
+    const gSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, ratio) * ghostSpeedMult;
+    const fSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, ratio) * ghostSpeedMult;
+    // ----------------------------------------------------------------
 
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
@@ -717,16 +731,18 @@ function updateGamePhysics(game) {
 
             if(tile === TILE.DOT) { p.score += 10; }
             else if(tile === TILE.POWER) { p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
-            // Все цвета заменены на белый #FFFFFF
-            else if(tile === TILE.CHERRY) { collectItem(TILE.CHERRY, 100, "#FFFFFF", "+100"); }
-            else if(tile === TILE.STRAWBERRY) { collectItem(TILE.STRAWBERRY, 300, "#FFFFFF", "+300"); }
-            else if(tile === TILE.ORANGE) { collectItem(TILE.ORANGE, 500, "#FFFFFF", "+500"); }
-            else if(tile === TILE.APPLE) { collectItem(TILE.APPLE, 700, "#FFFFFF", "+700"); }
-            else if(tile === TILE.MELON) { collectItem(TILE.MELON, 1000, "#FFFFFF", "+1000"); }
-            else if(tile === TILE.GALAXIAN) { collectItem(TILE.GALAXIAN, 2000, "#FFFFFF", "+2000"); }
-            else if(tile === TILE.BELL) { collectItem(TILE.BELL, 3000, "#FFFFFF", "+3000"); }
-            else if(tile === TILE.KEY) { collectItem(TILE.KEY, 5000, "#FFFFFF", "+5000"); }
             
+            // --- ИЗМЕНЕНИЕ 2: Новые значения очков ---
+            else if(tile === TILE.CHERRY) { collectItem(TILE.CHERRY, 100, "#FFFFFF", "+100"); }
+            else if(tile === TILE.STRAWBERRY) { collectItem(TILE.STRAWBERRY, 200, "#FFFFFF", "+200"); } // было 300
+            else if(tile === TILE.ORANGE) { collectItem(TILE.ORANGE, 300, "#FFFFFF", "+300"); }         // было 500
+            else if(tile === TILE.APPLE) { collectItem(TILE.APPLE, 400, "#FFFFFF", "+400"); }           // было 700
+            else if(tile === TILE.MELON) { collectItem(TILE.MELON, 500, "#FFFFFF", "+500"); }           // было 1000
+            else if(tile === TILE.GALAXIAN) { collectItem(TILE.GALAXIAN, 800, "#FFFFFF", "+800"); }     // было 2000
+            else if(tile === TILE.BELL) { collectItem(TILE.BELL, 1000, "#FFFFFF", "+1000"); }           // было 3000
+            else if(tile === TILE.KEY) { collectItem(TILE.KEY, 1500, "#FFFFFF", "+1500"); }             // было 5000
+            // ------------------------------------------
+
             else if(tile === TILE.EVIL) { p.pvpTimer = PVP_MODE_DURATION; p.stats.evil++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         }
