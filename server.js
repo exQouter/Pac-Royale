@@ -33,6 +33,15 @@ const DEATH_ANIMATION_FRAMES = 60;
 const SPEED_BOOST_DURATION = 420; 
 const SCORE_MILESTONE = 10000;    
 
+// --- КОНФИГУРАЦИЯ БОССА ---
+const BOSS_TRIGGER_SCORE = 1000; 
+const BOSS_HP_MAX = 3;           
+const BOSS_WIDTH = 90;           
+const BOSS_HEIGHT = 90;          
+const BOSS_PROJECTILE_SPEED = 3.5;
+const BOSS_DASH_SPEED = 15.0;
+const BOSS_RETURN_SPEED = 4.0;
+
 const ROCKET_START_TIME = 10800; 
 const ROCKET_WAVE_INTERVAL = 180; 
 const ROCKET_WARNING_TIME = 120; 
@@ -43,7 +52,6 @@ const SURGE_RISE_TIME = 600;
 const SURGE_RETURN_TIME = 180;
 const SURGE_MAX_HEIGHT = 240;
 
-// Настройки поезда
 const TRAIN_MIN_PATTERNS = 10;
 const TRAIN_MAX_PATTERNS = 30;
 const TRAIN_YELLOW_TIME = 180; 
@@ -53,29 +61,17 @@ const TRAIN_LENGTH = 40;
 
 // --- ТАЙЛЫ ---
 const TILE = { 
-    EMPTY: 0, 
-    WALL: 1, 
-    DOT: 2, 
-    POWER: 3, 
-    CHERRY: 4, 
-    EVIL: 5, 
-    HEART: 6,
-    STRAWBERRY: 7,
-    ORANGE: 8,
-    APPLE: 9,
-    MELON: 10,
-    GALAXIAN: 11,
-    BELL: 12,
-    KEY: 13
+    EMPTY: 0, WALL: 1, DOT: 2, POWER: 3, CHERRY: 4, EVIL: 5, HEART: 6,
+    STRAWBERRY: 7, ORANGE: 8, APPLE: 9, MELON: 10, GALAXIAN: 11, BELL: 12, KEY: 13,
+    BOSS_ORB: 99 
 };
 
-// --- КОНФИГУРАЦИЯ ПРЕДМЕТОВ ---
 const ITEMS_CONFIG = [
-    { id: TILE.CHERRY,     weight: 1000 }, // 0 - 699
-    { id: TILE.STRAWBERRY, weight: 600 },  // 700 - 1399
-    { id: TILE.ORANGE,     weight: 400 },  // 1400 - 2099
-    { id: TILE.APPLE,      weight: 300 },  // 2100 - 2799
-    { id: TILE.MELON,      weight: 200 },  // ...
+    { id: TILE.CHERRY,     weight: 1000 },
+    { id: TILE.STRAWBERRY, weight: 600 },
+    { id: TILE.ORANGE,     weight: 400 },
+    { id: TILE.APPLE,      weight: 300 },
+    { id: TILE.MELON,      weight: 200 },
     { id: TILE.GALAXIAN,   weight: 100 },
     { id: TILE.BELL,       weight: 50 },
     { id: TILE.KEY,        weight: 10 }
@@ -83,7 +79,6 @@ const ITEMS_CONFIG = [
 
 const lobbies = {};
 
-// --- ЛИДЕРБОРД ---
 const DATA_FILE = path.join(__dirname, 'leaderboard.json');
 let globalLeaderboard = [];
 let saveTimeout = null;
@@ -93,15 +88,13 @@ function loadLeaderboard() {
         if (fs.existsSync(DATA_FILE)) {
             globalLeaderboard = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         }
-    } catch (err) { console.warn("Leaderboard load warning:", err.message); globalLeaderboard = []; }
+    } catch (err) { globalLeaderboard = []; }
 }
 
 function saveLeaderboard() {
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
-        fs.writeFile(DATA_FILE, JSON.stringify(globalLeaderboard, null, 2), (err) => {
-            if (err) console.error('Leaderboard save failed (ignoring):', err.message);
-        });
+        fs.writeFile(DATA_FILE, JSON.stringify(globalLeaderboard, null, 2), (err) => {});
     }, 5000);
 }
 
@@ -146,7 +139,20 @@ function createGame(roomId) {
         nextTrainLimit: TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS)),
         trainGapRows: 0, 
         train: { state: 'OFF', targetY: 0, timer: 0, dir: 1, ghosts: [] },
-        patternFruitConfig: []
+        patternFruitConfig: [],
+        boss: {
+            encountered: false,
+            state: 'IDLE', 
+            yStart: 0, yBase: 0,    
+            x: 0, y: 0,    
+            vx: 1.5,
+            hp: BOSS_HP_MAX,
+            shootTimer: 0,
+            attackState: 'SHOOT', 
+            attackTimer: 0,
+            projectiles: [],
+            phase: 0
+        }
     };
     initMap(game);
     return game;
@@ -154,6 +160,7 @@ function createGame(roomId) {
 
 function initMap(game) {
     game.rows = {};
+    game.changes = { removedDots: [], newRows: {} };
     game.cameraY = 0;
     game.patternRowIndex = 0;
     game.currentPattern = null;
@@ -161,10 +168,16 @@ function initMap(game) {
     game.patternsSinceTrain = 0;
     game.trainGapRows = 0;
     game.patternFruitConfig = [];
+    game.boss.state = 'IDLE';
+    game.boss.encountered = false;
+    game.boss.projectiles = [];
     
     for(let y=30; y>=-50; y--) generateRow(game, y);
-    for(let y=20; y<25; y++) { for(let x=1; x<MAP_WIDTH-1; x++) { if(!game.rows[y]) game.rows[y]=[]; game.rows[y][x] = TILE.EMPTY; } }
-    game.changes = { removedDots: [], newRows: {} };
+    
+    for(let y=20; y<25; y++) { 
+        if(!game.rows[y]) continue;
+        for(let x=1; x<MAP_WIDTH-1; x++) { game.rows[y][x] = TILE.EMPTY; } 
+    }
 }
 
 function resetGame(game) {
@@ -183,6 +196,11 @@ function resetGame(game) {
     game.trainGapRows = 0;
     game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
     game.patternFruitConfig = [];
+    
+    game.boss = {
+        encountered: false, state: 'IDLE', yStart: 0, yBase: 0, x: 0, y: 0, vx: 2,
+        hp: BOSS_HP_MAX, shootTimer: 0, attackState: 'SHOOT', attackTimer: 0, projectiles: [], phase: 0
+    };
 
     const pIds = Object.keys(game.players);
     for (const pid of pIds) {
@@ -199,24 +217,16 @@ function resetGame(game) {
         p.itemsCollected = {}; 
         p.stats = { ghosts: 0, players: 0, evil: 0 };
     }
-
     initMap(game);
 }
 
 function getWeightedFruit(game) {
     let maxScore = 0;
-    const pIds = Object.keys(game.players);
-    for (const pid of pIds) {
-        if (game.players[pid].score > maxScore) maxScore = game.players[pid].score;
-    }
-
+    Object.values(game.players).forEach(p => maxScore = Math.max(maxScore, p.score));
     let unlockedCount = Math.floor(maxScore / 700) + 1;
     if (unlockedCount > ITEMS_CONFIG.length) unlockedCount = ITEMS_CONFIG.length;
-
     const pool = ITEMS_CONFIG.slice(0, unlockedCount);
-    let totalWeight = 0;
-    for (let item of pool) totalWeight += item.weight;
-
+    let totalWeight = pool.reduce((a,b) => a + b.weight, 0);
     let rnd = Math.random() * totalWeight;
     for (let item of pool) {
         if (rnd < item.weight) return item.id;
@@ -226,33 +236,51 @@ function getWeightedFruit(game) {
 }
 
 function generateRow(game, yIndex) {
-    if (game.trainGapRows > 0) {
+    if (game.boss.state === 'PREPARING' || game.boss.state === 'ACTIVE' || game.boss.state === 'VULNERABLE') {
         const row = new Array(MAP_WIDTH).fill(TILE.EMPTY);
         row[0] = TILE.WALL;
         row[MAP_WIDTH - 1] = TILE.WALL;
-        
         game.rows[yIndex] = row;
         if (!game.changes.newRows) game.changes.newRows = {};
         game.changes.newRows[yIndex] = row;
+        cleanOldRows(game);
+        return;
+    }
 
+    if (game.trainGapRows > 0) {
+        const row = new Array(MAP_WIDTH).fill(TILE.EMPTY);
+        row[0] = TILE.WALL; row[MAP_WIDTH - 1] = TILE.WALL;
+        game.rows[yIndex] = row;
+        if (!game.changes.newRows) game.changes.newRows = {};
+        game.changes.newRows[yIndex] = row;
         if (game.trainGapRows === 3) {
             game.train.state = 'WAITING';
             game.train.targetY = yIndex * TILE_SIZE;
             game.train.dir = Math.random() > 0.5 ? 1 : -1;
             game.train.ghosts = [];
         }
-
         game.trainGapRows--;
-        
-        const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 50;
-        const keys = Object.keys(game.rows);
-        if (keys.length > 150) { for (const k of keys) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; } }
+        cleanOldRows(game);
         return; 
     }
 
     if (!game.currentPattern || game.patternRowIndex >= 10) {
         game.patternsSinceTrain++;
         
+        let maxScore = 0;
+        Object.values(game.players).forEach(p => maxScore = Math.max(maxScore, p.score));
+        
+        if (!game.boss.encountered && maxScore >= BOSS_TRIGGER_SCORE) {
+            game.boss.encountered = true;
+            game.boss.state = 'PREPARING';
+            game.boss.yStart = yIndex * TILE_SIZE; 
+            
+            game.ghosts = []; // Мгновенная очистка
+            
+            for(let i=0; i<35; i++) generateRow(game, yIndex - i);
+            return;
+        }
+
         if (game.patternsSinceTrain >= game.nextTrainLimit) {
             game.trainGapRows = 5; 
             game.patternsSinceTrain = 0;
@@ -263,19 +291,14 @@ function generateRow(game, yIndex) {
 
         game.currentPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
         game.patternRowIndex = 0;
-
         game.patternFruitConfig = [];
-        const itemsCount = Math.floor(Math.random() * 3); // 0, 1, 2
-        
+        const itemsCount = Math.floor(Math.random() * 3);
         if (itemsCount > 0) {
-            const possibleRows = [];
-            for(let r=0; r<10; r++) possibleRows.push(r);
-            for (let i = possibleRows.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [possibleRows[i], possibleRows[j]] = [possibleRows[j], possibleRows[i]];
+            const possibleRows = Array.from({length:10},(_,i)=>i);
+            for (let i=0; i<itemsCount; i++) {
+                const rnd = Math.floor(Math.random() * possibleRows.length);
+                game.patternFruitConfig.push(possibleRows.splice(rnd, 1)[0]);
             }
-            const chosenRows = possibleRows.slice(0, itemsCount);
-            chosenRows.forEach(rIndex => { game.patternFruitConfig.push(rIndex); });
         }
     }
     
@@ -287,13 +310,9 @@ function generateRow(game, yIndex) {
     let fruitSpawnInfo = null;
     if (game.patternFruitConfig.includes(patternIdx)) {
         const validIndices = [];
-        for(let k=0; k<10; k++) {
-            if (half[k] !== 1 && half[k] !== 3) validIndices.push(k);
-        }
+        for(let k=0; k<10; k++) if (half[k] !== 1 && half[k] !== 3) validIndices.push(k);
         if (validIndices.length > 0) {
-            const chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
-            const side = Math.random() < 0.5 ? 'left' : 'right'; 
-            fruitSpawnInfo = { idx: chosenIdx, side: side, type: getWeightedFruit(game) };
+            fruitSpawnInfo = { idx: validIndices[Math.floor(Math.random() * validIndices.length)], side: Math.random() < 0.5 ? 'left' : 'right', type: getWeightedFruit(game) };
         }
     }
 
@@ -320,10 +339,13 @@ function generateRow(game, yIndex) {
             row[right] = rightItem;
         }
     }
-
     game.rows[yIndex] = row;
     if (!game.changes.newRows) game.changes.newRows = {};
     game.changes.newRows[yIndex] = row;
+    cleanOldRows(game);
+}
+
+function cleanOldRows(game) {
     const cleanupThreshold = Math.floor(game.cameraY / TILE_SIZE) + 50;
     const keys = Object.keys(game.rows);
     if (keys.length > 150) { for (const k of keys) { if (parseInt(k) > cleanupThreshold) delete game.rows[k]; } }
@@ -368,9 +390,7 @@ io.on('connection', (socket) => {
             x: (4 + mySlot * 4) * TILE_SIZE, y: 22 * TILE_SIZE,
             vx: 0, vy: 0, nextDir: null, score: 0, lives: 3, alive: true, 
             invulnTimer: 0, pvpTimer: 0, deathTimer: 0,
-            lastMilestone: 0,
-            itemsCollected: {},
-            stats: { ghosts: 0, players: 0, evil: 0 }
+            lastMilestone: 0, itemsCollected: {}, stats: { ghosts: 0, players: 0, evil: 0 }
         };
         currentRoom = roomId;
         socket.join(roomId);
@@ -449,7 +469,7 @@ setInterval(() => {
             if (tickCount % 2 === 0) {
                 io.to(roomId).emit('state', { 
                     t: Date.now(), cd: game.countdown, players: game.players, camY: game.cameraY, 
-                    rockets: [], warnings: [], ghosts: [], surgeHeight: 0, train: game.train
+                    rockets: [], warnings: [], ghosts: [], surgeHeight: 0, train: game.train, boss: game.boss
                 });
             }
             continue;
@@ -481,17 +501,24 @@ setInterval(() => {
                 ghosts: game.train.ghosts.map(g => ({ x: Math.round(g.x), y: Math.round(g.y), color: g.color, vx: g.vx }))
             };
 
+            const bossProj = game.boss.projectiles.map(p => ({
+                x: Math.round(p.x), y: Math.round(p.y), type: p.type
+            }));
+
             const s = { 
-                t: Date.now(), 
-                // ВАЖНО: Добавлено cd, чтобы клиент видел "GO!"
-                cd: game.countdown, 
-                camY: Math.round(game.cameraY * 100) / 100, 
+                t: Date.now(), cd: game.countdown, camY: Math.round(game.cameraY * 100) / 100, 
                 players: fastPlayers, ghosts: fastGhosts, 
                 ft: game.frightenedTimer, st: game.startTime, 
                 changes: game.changes, sbt: game.speedBoostTimer,
                 rockets: game.rocketState.rockets, warnings: game.rocketState.warnings,
                 surgeHeight: Math.round(game.surge.currentHeight),
-                train: trainData
+                train: trainData,
+                boss: { 
+                    state: game.boss.state, 
+                    x: Math.round(game.boss.x), y: Math.round(game.boss.y), 
+                    hp: game.boss.hp, projectiles: bossProj,
+                    attackState: game.boss.attackState
+                }
             };
             io.to(roomId).emit('state', s);
             game.changes = { removedDots: [], newRows: {} };
@@ -499,18 +526,165 @@ setInterval(() => {
     }
 }, 1000 / 60);
 
+function handleBossLogic(game) {
+    if (game.boss.state === 'IDLE' || game.boss.state === 'DEFEATED') return;
+
+    if (game.boss.state === 'PREPARING') {
+        const stopY = game.boss.yStart - 900; 
+        if (game.cameraY <= stopY) {
+            game.boss.state = 'ACTIVE';
+            game.ghosts = []; 
+            
+            game.boss.x = (MAP_WIDTH * TILE_SIZE) / 2 - BOSS_WIDTH / 2;
+            game.boss.y = game.cameraY + 50; 
+            game.boss.yBase = game.boss.y; 
+            game.boss.hp = BOSS_HP_MAX;
+            game.boss.attackState = 'SHOOT';
+            game.boss.shootTimer = 180; 
+            
+            io.to(game.id).emit('sfx', 'bossEntry'); 
+            io.to(game.id).emit('music', 'startBoss'); 
+            io.to(game.id).emit('popup', {x: game.boss.x, y: game.boss.y + 300, text: "BOSS FIGHT!", color: "#FF0000"});
+        }
+    } 
+    else if (game.boss.state === 'ACTIVE') {
+        game.gameSpeed = 0;
+        
+        if (game.boss.attackState === 'SHOOT') {
+            game.boss.x += game.boss.vx;
+            if (game.boss.x <= TILE_SIZE || game.boss.x + BOSS_WIDTH >= (MAP_WIDTH - 1) * TILE_SIZE) {
+                game.boss.vx *= -1;
+            }
+
+            game.boss.shootTimer--;
+            if (game.boss.shootTimer <= 0) {
+                game.boss.attackState = 'CHARGE';
+                game.boss.attackTimer = 120; 
+                io.to(game.id).emit('popup', {x: game.boss.x, y: game.boss.y + 100, text: "WARNING!", color: "#FFFF00"});
+                io.to(game.id).emit('sfx', 'bossCharge');
+            }
+
+            if (game.frameCounter % 60 === 0) { 
+                const typeRoll = Math.random();
+                let pType = 'harmful'; 
+                if (typeRoll > 0.6) pType = 'edible'; 
+                if (typeRoll > 0.8) pType = 'orb';    
+
+                game.boss.projectiles.push({
+                    x: game.boss.x + BOSS_WIDTH / 2 - 15,
+                    y: game.boss.y + BOSS_HEIGHT,
+                    vx: (Math.random() - 0.5) * 3, 
+                    vy: BOSS_PROJECTILE_SPEED,
+                    type: pType
+                });
+                io.to(game.id).emit('sfx', 'rocket');
+            }
+        }
+        else if (game.boss.attackState === 'CHARGE') {
+            game.boss.attackTimer--;
+            if (game.boss.attackTimer <= 0) {
+                game.boss.attackState = 'DASH';
+                io.to(game.id).emit('sfx', 'bossDash');
+            }
+        }
+        else if (game.boss.attackState === 'DASH') {
+            game.boss.y += BOSS_DASH_SPEED;
+            
+            if (game.boss.y > game.cameraY + 1000) {
+                game.boss.attackState = 'RETURN';
+                game.boss.y = game.cameraY - 300; 
+            }
+            
+            checkBossCollision(game, true); 
+        }
+        else if (game.boss.attackState === 'RETURN') {
+            game.boss.y += BOSS_RETURN_SPEED;
+            if (game.boss.y >= game.boss.yBase) {
+                game.boss.y = game.boss.yBase;
+                game.boss.attackState = 'SHOOT';
+                game.boss.shootTimer = 300; 
+            }
+        }
+    } 
+    else if (game.boss.state === 'VULNERABLE') {
+        game.gameSpeed = 0;
+        game.boss.x += (Math.random() - 0.5) * 4; 
+        checkBossCollision(game, false);
+    }
+
+    for (let i = game.boss.projectiles.length - 1; i >= 0; i--) {
+        const p = game.boss.projectiles[i];
+        p.x += p.vx; p.y += p.vy;
+        if (p.y > game.cameraY + 900) { game.boss.projectiles.splice(i, 1); continue; }
+
+        const pIds = Object.keys(game.players);
+        for (const pid of pIds) {
+            const pl = game.players[pid];
+            if (!pl.alive || pl.deathTimer > 0) continue;
+            
+            if (Math.abs(pl.x - p.x) < 20 && Math.abs(pl.y - p.y) < 20) {
+                if (p.type === 'harmful') {
+                    if (pl.invulnTimer <= 0) loseLife(game, pl);
+                } else if (p.type === 'edible') {
+                    pl.score += 200;
+                    game.boss.projectiles.splice(i, 1);
+                    io.to(game.id).emit('sfx', 'eatGhost');
+                    io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+200", color: "#AAF"});
+                    break;
+                } else if (p.type === 'orb') {
+                    game.boss.hp--;
+                    pl.score += 500;
+                    game.boss.projectiles.splice(i, 1);
+                    io.to(game.id).emit('sfx', 'power');
+                    
+                    if (game.boss.hp <= 0) {
+                        game.boss.state = 'VULNERABLE';
+                        io.to(game.id).emit('popup', {x: game.boss.x, y: game.boss.y + 100, text: "ATTACK BOSS!", color: "#FFFF00"});
+                    } else {
+                        io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "HIT!", color: "#FFF"});
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+function checkBossCollision(game, lethal) {
+    const pIds = Object.keys(game.players);
+    for (const pid of pIds) {
+        const pl = game.players[pid];
+        if (!pl.alive) continue;
+        if (pl.x > game.boss.x && pl.x < game.boss.x + BOSS_WIDTH &&
+            pl.y > game.boss.y && pl.y < game.boss.y + BOSS_HEIGHT) {
+            
+            if (lethal) {
+                if (pl.invulnTimer <= 0) loseLife(game, pl);
+            } else {
+                pl.score += 5000;
+                game.boss.state = 'DEFEATED';
+                game.boss.projectiles = []; 
+                io.to(game.id).emit('sfx', 'eatGhost');
+                io.to(game.id).emit('music', 'stop'); 
+                io.to(game.id).emit('popup', {x: game.boss.x, y: game.boss.y, text: "BOSS DEFEATED +5000", color: "#FFD700"});
+                
+                setTimeout(() => {
+                    game.gameSpeed = CAM_SPEED_START;
+                    game.currentPattern = null; 
+                    game.boss.state = 'IDLE'; 
+                }, 2000);
+            }
+        }
+    }
+}
+
 function handleRocketLogic(game) {
     const rs = game.rocketState;
     const fc = game.frameCounter;
-    
     if (!rs.active && fc >= rs.nextCycle) { 
-        if (game.surge.state !== 'IDLE') {
-            rs.nextCycle = fc + 120;
-            return;
-        }
+        if (game.surge.state !== 'IDLE') { rs.nextCycle = fc + 120; return; }
         rs.active = true; rs.wavesLeft = 3; rs.nextWaveTime = fc; 
     }
-    
     if (rs.active) {
         if (rs.wavesLeft > 0 && fc >= rs.nextWaveTime) {
             rs.wavesLeft--; rs.nextWaveTime = fc + ROCKET_WAVE_INTERVAL; 
@@ -538,96 +712,47 @@ function handleRocketLogic(game) {
 }
 
 function handleSurgeLogic(game) {
-    const s = game.surge;
-    const fc = game.frameCounter;
-    
+    const s = game.surge; const fc = game.frameCounter;
     if (s.state === 'IDLE') {
-        if (fc >= s.nextTime) { 
-            if (game.rocketState.active) {
-                s.nextTime = fc + 120;
-                return;
-            }
-            s.state = 'RISING'; io.to(game.id).emit('sfx', 'warning'); 
-        }
+        if (fc >= s.nextTime) { if (game.rocketState.active) { s.nextTime = fc + 120; return; } s.state = 'RISING'; io.to(game.id).emit('sfx', 'warning'); }
     } else if (s.state === 'RISING') {
-        const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; 
-        s.currentHeight += riseSpeed;
+        const riseSpeed = SURGE_MAX_HEIGHT / SURGE_RISE_TIME; s.currentHeight += riseSpeed;
         if (s.currentHeight >= SURGE_MAX_HEIGHT) { s.currentHeight = SURGE_MAX_HEIGHT; s.state = 'RETURNING'; }
     } else if (s.state === 'RETURNING') {
-        const returnSpeed = SURGE_MAX_HEIGHT / SURGE_RETURN_TIME; 
-        s.currentHeight -= returnSpeed;
+        const returnSpeed = SURGE_MAX_HEIGHT / SURGE_RETURN_TIME; s.currentHeight -= returnSpeed;
         if (s.currentHeight <= 0) { s.currentHeight = 0; s.state = 'IDLE'; s.nextTime = fc + SURGE_MIN_INTERVAL + Math.floor(Math.random() * (SURGE_MAX_INTERVAL - SURGE_MIN_INTERVAL)); }
     }
 }
 
 function handleTrainLogic(game) {
-    const t = game.train;
-    if (t.state === 'OFF') return;
-
+    const t = game.train; if (t.state === 'OFF') return;
     const screenY = t.targetY - game.cameraY;
-
     if (t.state === 'WAITING') {
-        if (screenY > 100 && screenY < 900) {
-            t.state = 'YELLOW';
-            t.timer = TRAIN_YELLOW_TIME;
-            io.to(game.id).emit('sfx', 'trainBell'); 
-        }
-    }
-    else if (t.state === 'YELLOW') {
-        t.timer--;
-        if (t.timer <= 0) {
-            t.state = 'RED';
-            t.timer = TRAIN_RED_TIME;
-        }
-    }
-    else if (t.state === 'RED') {
-        t.timer--;
-        if (t.timer <= 0) {
+        if (screenY > 100 && screenY < 900) { t.state = 'YELLOW'; t.timer = TRAIN_YELLOW_TIME; io.to(game.id).emit('sfx', 'trainBell'); }
+    } else if (t.state === 'YELLOW') {
+        t.timer--; if (t.timer <= 0) { t.state = 'RED'; t.timer = TRAIN_RED_TIME; }
+    } else if (t.state === 'RED') {
+        t.timer--; if (t.timer <= 0) {
             t.state = 'CROSSING';
-            const ghostCount = TRAIN_LENGTH; 
-            const colors = ['red','pink','cyan','orange'];
+            const ghostCount = TRAIN_LENGTH; const colors = ['red','pink','cyan','orange'];
             const startX = t.dir === 1 ? -150 : (MAP_WIDTH * TILE_SIZE + 150);
-            
             const offsets = [-TILE_SIZE, 0, TILE_SIZE];
-
             for (let rowOffset of offsets) {
                 const yPos = t.targetY + rowOffset;
-                
-                for(let i=0; i<ghostCount; i++) {
-                    t.ghosts.push({
-                        x: startX - (i * 35 * t.dir), 
-                        y: yPos,
-                        color: colors[(i + Math.abs(rowOffset)) % 4], 
-                        vx: t.dir * TRAIN_SPEED
-                    });
-                }
+                for(let i=0; i<ghostCount; i++) { t.ghosts.push({ x: startX - (i * 35 * t.dir), y: yPos, color: colors[(i + Math.abs(rowOffset)) % 4], vx: t.dir * TRAIN_SPEED }); }
             }
-            io.to(game.id).emit('sfx', 'trainRumble'); 
+            io.to(game.id).emit('sfx', 'trainRumble');
         }
-    }
-    else if (t.state === 'CROSSING') {
-        let stillActive = false;
-        const limit = MAP_WIDTH * TILE_SIZE + 300;
-        
+    } else if (t.state === 'CROSSING') {
+        let stillActive = false; const limit = MAP_WIDTH * TILE_SIZE + 300;
         for (let g of t.ghosts) {
             g.x += g.vx;
             if (t.dir === 1 && g.x < limit) stillActive = true;
             if (t.dir === -1 && g.x > -300) stillActive = true;
-            
             const pIds = Object.keys(game.players);
-            for (const pid of pIds) { 
-                const p = game.players[pid]; 
-                if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0 && 
-                    Math.abs(p.x - g.x) < 25 && Math.abs(p.y - g.y) < 25) {
-                    loseLife(game, p); 
-                }
-            }
+            for (const pid of pIds) { const p = game.players[pid]; if (p.alive && p.deathTimer === 0 && p.invulnTimer <= 0 && Math.abs(p.x - g.x) < 25 && Math.abs(p.y - g.y) < 25) loseLife(game, p); }
         }
-        
-        if (!stillActive) {
-            t.state = 'OFF';
-            t.ghosts = [];
-        }
+        if (!stillActive) { t.state = 'OFF'; t.ghosts = []; }
     }
 }
 
@@ -637,34 +762,20 @@ function updateGamePhysics(game) {
     if (!anyAlive) return;
 
     game.frameCounter++;
-    
-    // --- ИЗМЕНЕНИЕ 1: Разделение скорости игроков и привидений ---
-    let playerSpeedMult = 1.0;
-    let ghostSpeedMult = 1.0;
-
-    if (game.speedBoostTimer > 0) { 
-        game.speedBoostTimer--; 
-        playerSpeedMult = 1.5; // Игрок и камера ускоряются
-        ghostSpeedMult = 0.5;  // Привидения замедляются в 2 раза
-    }
-
+    let playerSpeedMult = 1.0; let ghostSpeedMult = 1.0;
+    if (game.speedBoostTimer > 0) { game.speedBoostTimer--; playerSpeedMult = 1.5; ghostSpeedMult = 0.5; }
     if(game.gameSpeed < CAM_SPEED_MAX) game.gameSpeed += CAM_ACCEL;
     
-    // Камера движется со скоростью игрока
-    game.cameraY -= game.gameSpeed * playerSpeedMult;
+    handleBossLogic(game);
+    if (game.boss.state !== 'ACTIVE' && game.boss.state !== 'VULNERABLE') { game.cameraY -= game.gameSpeed * playerSpeedMult; }
     
-    handleRocketLogic(game);
-    handleSurgeLogic(game); 
-    handleTrainLogic(game);
+    handleRocketLogic(game); handleSurgeLogic(game); handleTrainLogic(game);
 
     let ratio = (game.gameSpeed - CAM_SPEED_START) / (CAM_SPEED_MAX - CAM_SPEED_START);
     if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
-
-    // Применяем разные множители
     const pSpeed = lerp(PLAYER_SPEED_START, PLAYER_SPEED_MAX, ratio) * playerSpeedMult;
     const gSpeed = lerp(GHOST_SPEED_START, GHOST_SPEED_MAX, ratio) * ghostSpeedMult;
     const fSpeed = lerp(FRIGHT_SPEED_START, FRIGHT_SPEED_MAX, ratio) * ghostSpeedMult;
-    // ----------------------------------------------------------------
 
     const topRow = Math.floor(game.cameraY / TILE_SIZE) - 5;
     if(!game.rows[topRow]) generateRow(game, topRow);
@@ -675,43 +786,27 @@ function updateGamePhysics(game) {
         let p = game.players[id];
         if(!p.alive) continue;
         if (p.deathTimer > 0) { p.deathTimer--; if (p.deathTimer === 0) finalizeDeath(game, p); continue; }
-        if(p.invulnTimer > 0) p.invulnTimer--;
-        if(p.pvpTimer > 0) p.pvpTimer--;
+        if(p.invulnTimer > 0) p.invulnTimer--; if(p.pvpTimer > 0) p.pvpTimer--;
 
-        // --- 10000 Points Logic for 1UP ---
         const myMilestone = Math.floor(p.score / SCORE_MILESTONE);
         if (myMilestone > game.globalThreshold) {
-            game.globalThreshold = myMilestone; 
-            game.speedBoostTimer = SPEED_BOOST_DURATION;
-            p.invulnTimer = SPEED_BOOST_DURATION; 
-            io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "HYPER SPEED!", color: "#FFFF00"});
-            io.to(game.id).emit('sfx', 'power');
+            game.globalThreshold = myMilestone; game.speedBoostTimer = SPEED_BOOST_DURATION; p.invulnTimer = SPEED_BOOST_DURATION; 
+            io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "HYPER SPEED!", color: "#FFFF00"}); io.to(game.id).emit('sfx', 'power');
         }
-        // Individual 1UP check
         if (myMilestone > p.lastMilestone) {
-            p.lastMilestone = myMilestone;
-            if (p.lives < 3) {
-                p.lives++;
-                io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"});
-                io.to(game.id).emit('sfx', 'eatFruit');
-            }
+            p.lastMilestone = myMilestone; if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); io.to(game.id).emit('sfx', 'eatFruit'); }
         }
 
         const gx = Math.round(p.x / TILE_SIZE), gy = Math.round(p.y / TILE_SIZE);
         const px = gx * TILE_SIZE, py = gy * TILE_SIZE;
         let spd = pSpeed; if (p.pvpTimer > 0) spd *= 1.3;
-        const moveStep = spd;
-        const distSq = (p.x - px)**2 + (p.y - py)**2;
+        const moveStep = spd; const distSq = (p.x - px)**2 + (p.y - py)**2;
         
         if (distSq <= moveStep * moveStep) {
-            if (p.nextDir && getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { 
-                p.x = px; p.y = py; p.vx = p.nextDir.x * spd; p.vy = p.nextDir.y * spd; p.nextDir = null; 
-            }
+            if (p.nextDir && getTile(game, gx + p.nextDir.x, gy + p.nextDir.y) !== TILE.WALL) { p.x = px; p.y = py; p.vx = p.nextDir.x * spd; p.vy = p.nextDir.y * spd; p.nextDir = null; }
             if (getTile(game, gx + Math.sign(p.vx), gy + Math.sign(p.vy)) === TILE.WALL) { p.vx = 0; p.vy = 0; p.x = px; p.y = py; }
         }
-
-        if (p.vx !== 0) p.vx = Math.sign(p.vx) * spd;
-        if (p.vy !== 0) p.vy = Math.sign(p.vy) * spd;
+        if (p.vx !== 0) p.vx = Math.sign(p.vx) * spd; if (p.vy !== 0) p.vy = Math.sign(p.vy) * spd;
         p.x += p.vx; p.y += p.vy;
         
         const tile = getTile(game, gx, gy);
@@ -719,29 +814,17 @@ function updateGamePhysics(game) {
             game.rows[gy][gx] = TILE.EMPTY;
             if(!game.changes.removedDots) game.changes.removedDots = [];
             game.changes.removedDots.push({x: gx, y: gy});
-            
-            // --- HELPER FOR COLLECTING ITEM ---
-            const collectItem = (type, points, color, popupText) => {
-                p.score += points;
-                p.itemsCollected[type] = (p.itemsCollected[type] || 0) + 1;
-                if (popupText) io.to(game.id).emit('popup', {x: p.x, y: p.y, text: popupText, color: color});
-                io.to(game.id).emit('sfx', 'eatFruit');
-            };
-
+            const collectItem = (type, points, color, popupText) => { p.score += points; p.itemsCollected[type] = (p.itemsCollected[type] || 0) + 1; if (popupText) io.to(game.id).emit('popup', {x: p.x, y: p.y, text: popupText, color: color}); io.to(game.id).emit('sfx', 'eatFruit'); };
             if(tile === TILE.DOT) { p.score += 10; }
             else if(tile === TILE.POWER) { p.score += 50; game.frightenedTimer = POWER_MODE_DURATION; io.to(game.id).emit('sfx', 'power'); }
-            
-            // --- ИЗМЕНЕНИЕ 2: Новые значения очков ---
-            else if(tile === TILE.CHERRY) { collectItem(TILE.CHERRY, 100, "#FFFFFF", "+100"); }
-            else if(tile === TILE.STRAWBERRY) { collectItem(TILE.STRAWBERRY, 200, "#FFFFFF", "+200"); } // было 300
-            else if(tile === TILE.ORANGE) { collectItem(TILE.ORANGE, 300, "#FFFFFF", "+300"); }         // было 500
-            else if(tile === TILE.APPLE) { collectItem(TILE.APPLE, 400, "#FFFFFF", "+400"); }           // было 700
-            else if(tile === TILE.MELON) { collectItem(TILE.MELON, 500, "#FFFFFF", "+500"); }           // было 1000
-            else if(tile === TILE.GALAXIAN) { collectItem(TILE.GALAXIAN, 800, "#FFFFFF", "+800"); }     // было 2000
-            else if(tile === TILE.BELL) { collectItem(TILE.BELL, 1000, "#FFFFFF", "+1000"); }           // было 3000
-            else if(tile === TILE.KEY) { collectItem(TILE.KEY, 1500, "#FFFFFF", "+1500"); }             // было 5000
-            // ------------------------------------------
-
+            else if(tile === TILE.CHERRY) collectItem(TILE.CHERRY, 100, "#FFFFFF", "+100");
+            else if(tile === TILE.STRAWBERRY) collectItem(TILE.STRAWBERRY, 200, "#FFFFFF", "+200");
+            else if(tile === TILE.ORANGE) collectItem(TILE.ORANGE, 300, "#FFFFFF", "+300");
+            else if(tile === TILE.APPLE) collectItem(TILE.APPLE, 400, "#FFFFFF", "+400");
+            else if(tile === TILE.MELON) collectItem(TILE.MELON, 500, "#FFFFFF", "+500");
+            else if(tile === TILE.GALAXIAN) collectItem(TILE.GALAXIAN, 800, "#FFFFFF", "+800");
+            else if(tile === TILE.BELL) collectItem(TILE.BELL, 1000, "#FFFFFF", "+1000");
+            else if(tile === TILE.KEY) collectItem(TILE.KEY, 1500, "#FFFFFF", "+1500");
             else if(tile === TILE.EVIL) { p.pvpTimer = PVP_MODE_DURATION; p.stats.evil++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "EVIL MODE!", color: "#FF0000"}); io.to(game.id).emit('sfx', 'power'); }
             else if(tile === TILE.HEART) { if (p.lives < 3) { p.lives++; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "1UP!", color: "#FF69B4"}); } else { p.score += 100; io.to(game.id).emit('popup', {x: p.x, y: p.y, text: "+100", color: "#FFF"}); } io.to(game.id).emit('sfx', 'eatFruit'); }
         }
@@ -761,11 +844,27 @@ function updateGamePhysics(game) {
         }
     }
 
-    if (game.cameraY < game.nextGhostSpawn) {
-        let sx, sy, tries=0; 
-        do { sx = Math.floor(Math.random()*(MAP_WIDTH-4)+2)*TILE_SIZE; sy = (Math.floor(game.cameraY/TILE_SIZE)-2)*TILE_SIZE; tries++; } while (getTile(game, sx/TILE_SIZE, sy/TILE_SIZE)===TILE.WALL && tries<10);
-        game.ghosts.push({ x: sx, y: sy, vx: 0, vy: 0, lastDir: {x:0,y:0}, dead: false, color: ['red','pink','cyan','orange'][Math.floor(Math.random()*4)] });
-        game.nextGhostSpawn -= 500;
+    if (game.boss.state === 'IDLE' && game.cameraY < game.nextGhostSpawn) {
+        // УМНЫЙ СПАВН: Проверка на пустоту
+        const spawnRowIndex = Math.floor(game.nextGhostSpawn / TILE_SIZE);
+        const row = game.rows[spawnRowIndex];
+        let isArenaBuffer = true;
+        if (row) {
+            for(let x=1; x<MAP_WIDTH-1; x++) {
+                if(row[x] !== TILE.EMPTY) { isArenaBuffer = false; break; }
+            }
+        }
+
+        if (isArenaBuffer) {
+            // Если это буферная зона, откладываем спавн
+            game.nextGhostSpawn -= TILE_SIZE;
+        } else {
+            // Спавним привидение
+            let sx, sy, tries=0; 
+            do { sx = Math.floor(Math.random()*(MAP_WIDTH-4)+2)*TILE_SIZE; sy = (Math.floor(game.cameraY/TILE_SIZE)-2)*TILE_SIZE; tries++; } while (getTile(game, sx/TILE_SIZE, sy/TILE_SIZE)===TILE.WALL && tries<10);
+            game.ghosts.push({ x: sx, y: sy, vx: 0, vy: 0, lastDir: {x:0,y:0}, dead: false, color: ['red','pink','cyan','orange'][Math.floor(Math.random()*4)] });
+            game.nextGhostSpawn -= 500;
+        }
     }
 
     game.ghosts.forEach(g => {
@@ -787,20 +886,12 @@ function updateGamePhysics(game) {
                 const best = valid[0]; g.vx = best.x * speed; g.vy = best.y * speed; g.lastDir = {x: best.x, y: best.y};
             } else { g.vx = 0; g.vy = 0; }
         }
-        
         let allowMove = true;
         if (['YELLOW', 'RED', 'CROSSING'].includes(game.train.state)) {
-            const nextY = g.y + g.vy;
-            const safeDistance = 60; 
-            if (Math.abs(nextY - game.train.targetY) < safeDistance) {
-                allowMove = false;
-            }
+            const nextY = g.y + g.vy; const safeDistance = 60; 
+            if (Math.abs(nextY - game.train.targetY) < safeDistance) allowMove = false;
         }
-
-        if (allowMove) {
-            g.x += g.vx;
-            g.y += g.vy;
-        }
+        if (allowMove) { g.x += g.vx; g.y += g.vy; }
         
         const pIds = Object.keys(game.players);
         for(const pid of pIds) {
@@ -843,14 +934,7 @@ function finalizeDeath(game, p) {
         const anyAlive = Object.values(game.players).some(pl => pl.alive);
         const allDead = !anyAlive;
         
-        // Передаем collected items для статистики
-        io.to(p.id).emit('gameOver', { 
-            score: p.score, 
-            stats: p.stats, 
-            items: p.itemsCollected, // Передаем словарь собранных предметов
-            leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})), 
-            allDead: allDead 
-        });
+        io.to(p.id).emit('gameOver', { score: p.score, stats: p.stats, items: p.itemsCollected, leaderboard: matchResults.map(pl => ({name: pl.name, score: pl.score, color: pl.color, alive: pl.alive})), allDead: allDead });
         if (allDead) io.to(game.id).emit('matchEnded');
     }
 }
