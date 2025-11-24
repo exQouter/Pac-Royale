@@ -318,7 +318,7 @@
         socket.on('roomClosed', () => { hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); document.getElementById('host-left-screen').classList.add('visible'); synth.stopSiren(); });
         
         socket.on('gameStarted', () => { 
-            prevScore = 0; // <--- FIX: Сброс счета при старте игры
+            prevScore = 0; 
             visualPlayers = {}; 
             hideSpectatorBtn(); document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible')); 
             document.getElementById('ui-layer').style.display = 'flex';
@@ -340,7 +340,8 @@
             else if(t==='trainBell') synth.playTrainBell();
             else if(t==='trainRumble') synth.playTrainRumble();
         });
-        socket.on('popup', p => popups.push({x: p.x, y: p.y, text: p.text, life: 60, color: p.color}));
+        // --- FIX: Life increased to 120 (2 sec) ---
+        socket.on('popup', p => popups.push({x: p.x, y: p.y, text: p.text, life: 120, color: p.color}));
         
         function updateLeaderboardHTML(playersMap) {
             const t = document.getElementById('match-results-container');
@@ -558,7 +559,8 @@
             }
 
             popups = popups.filter(p => p.life > 0);
-            popups.forEach(p => { p.life--; p.y -= 1; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - visualCamY); });
+            // --- FIX: Slower float speed (0.5) ---
+            popups.forEach(p => { p.life--; p.y -= 0.5; ctx.fillStyle = p.color || '#00FFFF'; ctx.font = "10px 'Press Start 2P'"; ctx.fillText(p.text, p.x+15, p.y - visualCamY); });
             
             const ty = canvas.height - 40; if(s.cd > 0) deathZoneY = canvas.height + 100; else deathZoneY += (ty - deathZoneY) * 0.02; 
             const surgeHeight = s.surgeHeight || 0; const visualDeathY = deathZoneY - surgeHeight; const gc = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852'];

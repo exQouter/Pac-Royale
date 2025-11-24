@@ -70,7 +70,6 @@ const TILE = {
 };
 
 // --- КОНФИГУРАЦИЯ ПРЕДМЕТОВ ---
-// weight - чем больше число, тем чаще падает (относительно других доступных)
 const ITEMS_CONFIG = [
     { id: TILE.CHERRY,     weight: 1000 }, // 0 - 699
     { id: TILE.STRAWBERRY, weight: 600 },  // 700 - 1399
@@ -146,15 +145,8 @@ function createGame(roomId) {
         patternsSinceTrain: 0,
         nextTrainLimit: TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS)),
         trainGapRows: 0, 
-        train: {
-            state: 'OFF', 
-            targetY: 0,
-            timer: 0,
-            dir: 1,
-            ghosts: [] 
-        },
-        // Логика спавна предметов
-        patternFruitConfig: [] // Хранит информацию: на какой строке паттерна спавнить фрукт
+        train: { state: 'OFF', targetY: 0, timer: 0, dir: 1, ghosts: [] },
+        patternFruitConfig: []
     };
     initMap(game);
     return game;
@@ -192,7 +184,7 @@ function resetGame(game) {
     game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
     game.patternFruitConfig = [];
 
-    initMap(game);
+    // 1. Сначала сбрасываем статистику игроков
     const pIds = Object.keys(game.players);
     for (const pid of pIds) {
         const socketConnected = io.sockets.sockets.get(pid);
@@ -201,33 +193,30 @@ function resetGame(game) {
         p.x = (4 + p.colorIdx * 4) * TILE_SIZE;
         p.y = 22 * TILE_SIZE;
         p.vx = 0; p.vy = 0; p.nextDir = null;
-        p.score = 0; p.lives = 3; p.alive = true;
+        p.score = 0; // СБРОС ОЧКОВ
+        p.lives = 3; p.alive = true;
         p.invulnTimer = 0; p.pvpTimer = 0; p.deathTimer = 0;
         p.lastMilestone = 0;
-        p.itemsCollected = {}; // Для детальной статистики
+        p.itemsCollected = {}; 
         p.stats = { ghosts: 0, players: 0, evil: 0 };
     }
+
+    // 2. Только ПОСЛЕ сброса очков генерируем карту
+    // Теперь getWeightedFruit увидит 0 очков и сгенерирует только вишню
+    initMap(game);
 }
 
-// Новая функция: Выбор предмета на основе счета
 function getWeightedFruit(game) {
-    // 1. Находим максимальный счет среди живых (или всех) игроков
     let maxScore = 0;
     const pIds = Object.keys(game.players);
     for (const pid of pIds) {
         if (game.players[pid].score > maxScore) maxScore = game.players[pid].score;
     }
 
-    // 2. Определяем, какие предметы доступны (каждые 700 очков открывается новый)
-    // 0-699: index 0 (Cherry)
-    // 700-1399: index 1 (Strawberry) добавится
     let unlockedCount = Math.floor(maxScore / 700) + 1;
     if (unlockedCount > ITEMS_CONFIG.length) unlockedCount = ITEMS_CONFIG.length;
 
-    // 3. Формируем пул доступных предметов
     const pool = ITEMS_CONFIG.slice(0, unlockedCount);
-
-    // 4. Взвешенный рандом
     let totalWeight = 0;
     for (let item of pool) totalWeight += item.weight;
 
@@ -264,7 +253,6 @@ function generateRow(game, yIndex) {
         return; 
     }
 
-    // --- НАЧАЛО НОВОГО ПАТТЕРНА ---
     if (!game.currentPattern || game.patternRowIndex >= 10) {
         game.patternsSinceTrain++;
         
@@ -279,56 +267,42 @@ function generateRow(game, yIndex) {
         game.currentPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
         game.patternRowIndex = 0;
 
-        // ПЛАНИРОВАНИЕ СПАВНА ФРУКТОВ ДЛЯ ЭТОГО ПАТТЕРНА (0-2 штуки)
         game.patternFruitConfig = [];
-        const itemsCount = Math.floor(Math.random() * 3); // 0, 1 или 2
+        const itemsCount = Math.floor(Math.random() * 3); // 0, 1, 2
         
         if (itemsCount > 0) {
             const possibleRows = [];
-            // Собираем индексы строк (0-9)
             for(let r=0; r<10; r++) possibleRows.push(r);
-            
-            // Перемешиваем и берем itemsCount строк
             for (let i = possibleRows.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [possibleRows[i], possibleRows[j]] = [possibleRows[j], possibleRows[i]];
             }
-            
             const chosenRows = possibleRows.slice(0, itemsCount);
-            chosenRows.forEach(rIndex => {
-                game.patternFruitConfig.push(rIndex);
-            });
+            chosenRows.forEach(rIndex => { game.patternFruitConfig.push(rIndex); });
         }
     }
     
-    // --- ГЕНЕРАЦИЯ СТРОКИ ---
-    const patternIdx = game.patternRowIndex; // 0..9
+    const patternIdx = game.patternRowIndex;
     const half = game.currentPattern[9 - patternIdx];
     game.patternRowIndex++;
     const row = new Array(MAP_WIDTH);
     
-    // Проверяем, должен ли в этой строке быть фрукт
     let fruitSpawnInfo = null;
     if (game.patternFruitConfig.includes(patternIdx)) {
-        // Ищем валидные позиции в half массиве (где не стена и не Power)
         const validIndices = [];
         for(let k=0; k<10; k++) {
             if (half[k] !== 1 && half[k] !== 3) validIndices.push(k);
         }
-        
         if (validIndices.length > 0) {
             const chosenIdx = validIndices[Math.floor(Math.random() * validIndices.length)];
-            const side = Math.random() < 0.5 ? 'left' : 'right'; // Спавним только с одной стороны
+            const side = Math.random() < 0.5 ? 'left' : 'right'; 
             fruitSpawnInfo = { idx: chosenIdx, side: side, type: getWeightedFruit(game) };
         }
     }
 
-    // Обычная рандомная начинка (Heart, Evil, Dot)
     function getStandardContent() {
         const r = Math.random();
-        // Evil (очень редко)
         if (r < 0.0005) return TILE.EVIL; 
-        // Heart (очень редко)
         if (r < 0.0025) return TILE.HEART; 
         return TILE.DOT;
     }
@@ -336,30 +310,15 @@ function generateRow(game, yIndex) {
     for(let i = 0; i < 10; i++) { 
         let val = half[i];
         const right = 19 - i;
-        
-        // Стены и PowerPellets копируем как есть
-        if (val === 1) { 
-            row[i] = TILE.WALL; 
-            row[right] = TILE.WALL; 
-        } 
-        else if (val === 3) { 
-            row[i] = TILE.POWER; 
-            row[right] = TILE.POWER; 
-        } 
+        if (val === 1) { row[i] = TILE.WALL; row[right] = TILE.WALL; } 
+        else if (val === 3) { row[i] = TILE.POWER; row[right] = TILE.POWER; } 
         else { 
-            // По умолчанию - стандартный контент
             let leftItem = getStandardContent();
             let rightItem = getStandardContent();
-
-            // Если в этой строке запланирован фрукт
             if (fruitSpawnInfo && fruitSpawnInfo.idx === i) {
-                if (fruitSpawnInfo.side === 'left') {
-                    leftItem = fruitSpawnInfo.type;
-                } else {
-                    rightItem = fruitSpawnInfo.type;
-                }
+                if (fruitSpawnInfo.side === 'left') leftItem = fruitSpawnInfo.type;
+                else rightItem = fruitSpawnInfo.type;
             }
-
             row[i] = leftItem;
             row[right] = rightItem;
         }
