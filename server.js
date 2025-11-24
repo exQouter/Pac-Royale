@@ -483,6 +483,7 @@ setInterval(() => {
 
             const s = { 
                 t: Date.now(), 
+                // ВАЖНО: Добавлено cd, чтобы клиент видел "GO!"
                 cd: game.countdown, 
                 camY: Math.round(game.cameraY * 100) / 100, 
                 players: fastPlayers, ghosts: fastGhosts, 
