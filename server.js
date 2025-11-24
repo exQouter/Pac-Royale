@@ -184,7 +184,6 @@ function resetGame(game) {
     game.nextTrainLimit = TRAIN_MIN_PATTERNS + Math.floor(Math.random() * (TRAIN_MAX_PATTERNS - TRAIN_MIN_PATTERNS));
     game.patternFruitConfig = [];
 
-    // 1. Сначала сбрасываем статистику игроков
     const pIds = Object.keys(game.players);
     for (const pid of pIds) {
         const socketConnected = io.sockets.sockets.get(pid);
@@ -193,7 +192,7 @@ function resetGame(game) {
         p.x = (4 + p.colorIdx * 4) * TILE_SIZE;
         p.y = 22 * TILE_SIZE;
         p.vx = 0; p.vy = 0; p.nextDir = null;
-        p.score = 0; // СБРОС ОЧКОВ
+        p.score = 0; 
         p.lives = 3; p.alive = true;
         p.invulnTimer = 0; p.pvpTimer = 0; p.deathTimer = 0;
         p.lastMilestone = 0;
@@ -201,8 +200,6 @@ function resetGame(game) {
         p.stats = { ghosts: 0, players: 0, evil: 0 };
     }
 
-    // 2. Только ПОСЛЕ сброса очков генерируем карту
-    // Теперь getWeightedFruit увидит 0 очков и сгенерирует только вишню
     initMap(game);
 }
 
@@ -486,6 +483,7 @@ setInterval(() => {
 
             const s = { 
                 t: Date.now(), 
+                cd: game.countdown, 
                 camY: Math.round(game.cameraY * 100) / 100, 
                 players: fastPlayers, ghosts: fastGhosts, 
                 ft: game.frightenedTimer, st: game.startTime, 
