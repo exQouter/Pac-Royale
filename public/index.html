@@ -368,7 +368,8 @@
         socket.on('gameOver', data => { 
             document.getElementById('game-over').classList.add('visible'); document.getElementById('final-score').innerText = "YOUR SCORE: " + data.score; 
             isJoined = false; isSpectating = true; hideSpectatorBtn(); document.getElementById('mute-btn').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'none';
+            // ИЗМЕНЕНО: Оставляем слой интерфейса видимым, чтобы видеть жизни других
+            document.getElementById('ui-layer').style.display = 'flex';
             
             const ghostSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M4,15 A11,11 0 0 1 26,15 L26,26 L22,22 L18,26 L14,22 L10,26 L4,22 Z" fill="#1919A6"/><g fill="#FFB8FF"><rect x="9" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><path d="M8,20 L12,17 L16,20 L20,17 L24,20" stroke="#FFB8FF" stroke-width="1" fill="none"/></g></svg>`;
             const pacSVG = `<svg viewBox="0 0 30 30" class="icon-svg"><path d="M15,15 L25,10 A12,12 0 1 0 25,20 Z" fill="#FFFF00"/></svg>`;
