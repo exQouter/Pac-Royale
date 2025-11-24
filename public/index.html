@@ -301,6 +301,10 @@
         function returnToLobby() { socket.emit('returnToLobby'); uiClick(); }
 
         socket.on('lobbyUpdate', d => { 
+            isJoined = false; 
+            isSpectating = false;
+            synth.stopAll();
+
             hideSpectatorBtn(); 
             document.getElementById('ui-layer').style.display = 'none'; 
             document.getElementById('game-over').classList.remove('visible'); 
