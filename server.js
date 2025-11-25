@@ -34,14 +34,14 @@ const SPEED_BOOST_DURATION = 420;
 const SCORE_MILESTONE = 10000;    
 
 // --- КОНФИГУРАЦИЯ БОССА ---
-const BOSS_TRIGGER_SCORE = 2000; 
+const BOSS_TRIGGER_SCORE = 1000; // Босс на 10 000 очков
 const BOSS_HP_MAX = 3;           
 const BOSS_WIDTH = 90;           
 const BOSS_HEIGHT = 90;          
 const BOSS_PROJECTILE_SPEED = 3.5;
 const BOSS_DASH_SPEED = 15.0;
 const BOSS_RETURN_SPEED = 4.0;
-const BOSS_ENTRY_SPEED = 3.0; // Скорость влета
+const BOSS_ENTRY_SPEED = 3.0; 
 
 const ROCKET_START_TIME = 10800; 
 const ROCKET_WAVE_INTERVAL = 180; 
@@ -93,6 +93,7 @@ function saveLeaderboard() {
 function updateGlobalLeaderboard(name, score) {
     const safeName = (name || "PLAYER").substring(0, 10).toUpperCase().replace(/[<>]/g, "");
     globalLeaderboard.push({ name: safeName, score: parseInt(score) || 0 });
+    globalLeaderboard.sort((a, b) => b.score - a.score);
     globalLeaderboard = globalLeaderboard.slice(0, 10);
     saveLeaderboard();
     io.emit('leaderboardUpdate', globalLeaderboard);
@@ -132,7 +133,7 @@ function createGame(roomId) {
             encountered: false,
             state: 'IDLE', 
             yStart: 0, yBase: 0,
-            waveY: 0, // Для анимации уничтожения снизу вверх
+            waveY: 0, 
             x: 0, y: 0,    
             vx: 1.5,
             hp: BOSS_HP_MAX,
@@ -223,16 +224,13 @@ function getWeightedFruit(game) {
     return TILE.CHERRY;
 }
 
-// --- НОВАЯ ФУНКЦИЯ: ВОЛНА РАЗРУШЕНИЯ СНИЗУ ВВЕРХ ---
 function bossWaveClear(game) {
     const destroyedTiles = [];
-    const waveSpeed = 30; // Очень быстрое очищение (1 строка за тик)
+    const waveSpeed = 30; 
     
-    // waveY движется ВВЕРХ (уменьшается значение Y)
     game.boss.waveY -= waveSpeed;
     
     const currentWaveYIndex = Math.floor(game.boss.waveY / TILE_SIZE);
-    // Чистим диапазон вокруг текущей волны (для надежности)
     for (let y = currentWaveYIndex; y <= currentWaveYIndex + 2; y++) {
         if (!game.rows[y]) continue;
         let rowChanged = false;
@@ -252,7 +250,6 @@ function bossWaveClear(game) {
 }
 
 function generateRow(game, yIndex) {
-    // Если босс в активных фазах, генерируем ТОЛЬКО БОКОВЫЕ СТЕНЫ
     if (game.boss.state === 'PRE_ATTACK' || game.boss.state === 'ACTIVE' || game.boss.state === 'VULNERABLE') {
         const row = new Array(MAP_WIDTH).fill(TILE.EMPTY);
         row[0] = TILE.WALL; row[MAP_WIDTH - 1] = TILE.WALL;
@@ -284,20 +281,13 @@ function generateRow(game, yIndex) {
         let maxScore = 0;
         Object.values(game.players).forEach(p => maxScore = Math.max(maxScore, p.score));
         
-        // ТРИГГЕР БОССА - ТЕПЕРЬ ВКЛЮЧАЕТ WARNING
         if (!game.boss.encountered && maxScore >= BOSS_TRIGGER_SCORE) {
             game.boss.encountered = true;
             game.boss.state = 'WARNING'; 
             game.boss.yStart = yIndex * TILE_SIZE; 
-            
-            // ИЗМЕНЕНИЕ 1: Таймер ожидания 5 секунд (было 3)
             game.boss.shootTimer = 300; 
-            
-            // ИЗМЕНЕНИЕ 2: Звук нагнетания
             io.to(game.id).emit('sfx', 'bossBuildup');
-            
             io.to(game.id).emit('popup', {x: (MAP_WIDTH*TILE_SIZE)/2 - 50, y: game.cameraY + 200, text: "WARNING!", color: "#FF0000"});
-            // Продолжаем генерировать нормальные лабиринты, чтобы было что рушить
         }
 
         if (game.patternsSinceTrain >= game.nextTrainLimit) {
@@ -534,62 +524,41 @@ setInterval(() => {
 function handleBossLogic(game) {
     if (game.boss.state === 'IDLE' || game.boss.state === 'DEFEATED') return;
 
-    // --- 1. ПРЕДУПРЕЖДЕНИЕ (ТРЯСКА) ---
     if (game.boss.state === 'WARNING') {
-        game.boss.shootTimer--; // Используем это как общий таймер
+        game.boss.shootTimer--; 
         if (game.boss.shootTimer <= 0) {
             game.boss.state = 'ENTERING';
-            // Спавним босса для влета
             game.boss.x = (MAP_WIDTH * TILE_SIZE) / 2 - BOSS_WIDTH / 2;
             game.boss.y = game.cameraY - 200; 
-            // Точка старта волны уничтожения (с самого низа экрана)
             game.boss.waveY = game.cameraY + 900;
-            
             io.to(game.id).emit('sfx', 'bossEntry'); 
             io.to(game.id).emit('music', 'startBoss'); 
             io.to(game.id).emit('popup', {x: game.boss.x, y: game.boss.y + 300, text: "INCOMING!", color: "#FF0000"});
         }
     }
-
-    // --- 2. ВЛЕТ БОССА + ОЧИСТКА ВОЛНОЙ ---
     else if (game.boss.state === 'ENTERING') {
-        // Привидения убегают
         for (let g of game.ghosts) { g.vy = 10; g.vx = 0; }
-        
-        // Босс летит вниз
         game.boss.y += BOSS_ENTRY_SPEED;
-        
-        // Волна уничтожения идет снизу вверх
         const debris = bossWaveClear(game);
         if (debris.length > 0) {
             if (game.frameCounter % 4 === 0) io.to(game.id).emit('sfx', 'destroy');
             io.to(game.id).emit('debris', debris);
         }
-
         game.cameraY -= CAM_SPEED_START; 
-
-        // Босс занял позицию?
         if (game.boss.y >= game.cameraY + 50) {
             game.boss.state = 'PRE_ATTACK';
             game.boss.yBase = game.boss.y;
             game.boss.hp = BOSS_HP_MAX;
             game.boss.attackState = 'WAIT';
-            
-            // ИЗМЕНЕНИЕ 3: Таймер перед стрельбой теперь 1 секунда (было 2)
             game.boss.shootTimer = 60; 
-            
             game.ghosts = []; 
             io.to(game.id).emit('popup', {x: game.boss.x, y: game.boss.y + 300, text: "READY?", color: "#FFFF00"});
         }
     } 
-    // --- 3. ЗАДЕРЖКА ПЕРЕД АТАКОЙ ---
     else if (game.boss.state === 'PRE_ATTACK') {
         game.gameSpeed = 0;
-        
-        // ИЗМЕНЕНИЕ 4: Босс может двигаться пока ждет
         game.boss.x += game.boss.vx;
         if (game.boss.x <= TILE_SIZE || game.boss.x + BOSS_WIDTH >= (MAP_WIDTH - 1) * TILE_SIZE) { game.boss.vx *= -1; }
-        
         game.boss.shootTimer--;
         if (game.boss.shootTimer <= 0) {
             game.boss.state = 'ACTIVE';
@@ -599,11 +568,9 @@ function handleBossLogic(game) {
         }
         checkBossBodyCollision(game);
     }
-    // --- 4. АКТИВНАЯ ФАЗА ---
     else if (game.boss.state === 'ACTIVE') {
         game.gameSpeed = 0;
         checkBossBodyCollision(game);
-
         if (game.boss.attackState === 'SHOOT') {
             game.boss.x += game.boss.vx;
             if (game.boss.x <= TILE_SIZE || game.boss.x + BOSS_WIDTH >= (MAP_WIDTH - 1) * TILE_SIZE) { game.boss.vx *= -1; }
@@ -634,14 +601,12 @@ function handleBossLogic(game) {
             if (game.boss.y >= game.boss.yBase) { game.boss.y = game.boss.yBase; game.boss.attackState = 'SHOOT'; game.boss.shootTimer = 300; }
         }
     } 
-    // --- 5. УЯЗВИМОСТЬ ---
     else if (game.boss.state === 'VULNERABLE') {
         game.gameSpeed = 0;
         game.boss.x += (Math.random() - 0.5) * 4; 
         checkBossCollision(game, false); 
     }
 
-    // Обновление снарядов
     for (let i = game.boss.projectiles.length - 1; i >= 0; i--) {
         const p = game.boss.projectiles[i];
         p.x += p.vx; p.y += p.vy;
@@ -676,10 +641,13 @@ function handleBossLogic(game) {
             if (pl.x > game.boss.x && pl.x < game.boss.x + BOSS_WIDTH && pl.y > game.boss.y && pl.y < game.boss.y + BOSS_HEIGHT) {
                 pl.score += 5000;
                 game.boss.state = 'DEFEATED';
-                game.boss.attackState = 'WAIT'; // СБРАСЫВАЕМ СТАТУС АТАКИ, ЧТОБЫ УБРАТЬ ТРЯСКУ
+                game.boss.attackState = 'WAIT';
                 game.boss.projectiles = []; 
                 
-                // ИЗМЕНЕНИЕ 5: Эффект страха для всех привидений
+                // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
+                game.ghosts = []; // Удаляем всех текущих привидений
+                game.nextGhostSpawn = game.cameraY - 2500; // Откладываем спавн на ~15 секунд
+                
                 game.frightenedTimer = POWER_MODE_DURATION;
                 
                 io.to(game.id).emit('sfx', 'eatGhost');
@@ -689,7 +657,7 @@ function handleBossLogic(game) {
                 setTimeout(() => {
                     game.gameSpeed = CAM_SPEED_START;
                     game.currentPattern = null;
-                    game.trainGapRows = 2; // ДОБАВЛЕНО: Безопасный спавн
+                    game.trainGapRows = 2; 
                     game.boss.state = 'IDLE'; 
                 }, 3000);
             }
@@ -719,10 +687,13 @@ function checkBossCollision(game, lethal) {
             else {
                 pl.score += 5000;
                 game.boss.state = 'DEFEATED';
-                game.boss.attackState = 'WAIT'; // СБРАСЫВАЕМ СТАТУС АТАКИ
+                game.boss.attackState = 'WAIT';
                 game.boss.projectiles = []; 
                 
-                // ИЗМЕНЕНИЕ 5: Эффект страха для всех привидений
+                // --- ИЗМЕНЕНИЯ ЗДЕСЬ ---
+                game.ghosts = []; // Удаляем всех текущих привидений
+                game.nextGhostSpawn = game.cameraY - 2500; // Откладываем спавн на ~15 секунд
+
                 game.frightenedTimer = POWER_MODE_DURATION;
 
                 io.to(game.id).emit('sfx', 'eatGhost');
@@ -732,7 +703,7 @@ function checkBossCollision(game, lethal) {
                 setTimeout(() => {
                     game.gameSpeed = CAM_SPEED_START;
                     game.currentPattern = null; 
-                    game.trainGapRows = 2; // ДОБАВЛЕНО: Безопасный спавн
+                    game.trainGapRows = 2; 
                     game.boss.state = 'IDLE'; 
                 }, 2000);
             }
