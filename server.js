@@ -34,7 +34,7 @@ const SPEED_BOOST_DURATION = 420;
 const SCORE_MILESTONE = 10000;    
 
 // --- КОНФИГУРАЦИЯ БОССА ---
-const BOSS_TRIGGER_SCORE = 5000; 
+const BOSS_TRIGGER_SCORE = 1000; 
 const BOSS_HP_MAX = 3;           
 const BOSS_WIDTH = 90;           
 const BOSS_HEIGHT = 90;          

@@ -527,7 +527,7 @@
             let isShaking = s.sbt > 0;
             if (s.surgeHeight > 0) isShaking = true;
             if (s.train && s.train.state === 'CROSSING') isShaking = true;
-            if (s.boss && (s.boss.state === 'ACTIVE' || s.boss.state === 'DEFEATED')) isShaking = true;
+            if (s.boss && s.boss.state === 'ACTIVE') isShaking = true;
             
             // УСИЛЕННАЯ ТРЯСКА В WARNING
             if (s.boss && s.boss.state === 'WARNING') {
@@ -546,10 +546,9 @@
                 shakeX = (Math.random() - 0.5) * 4; 
                 shakeY = (Math.random() - 0.5) * 4; 
             }
-            
-            // ОТКЛЮЧЕНИЕ ТРЯСКИ ЕСЛИ БОСС УЯЗВИМ
-            if (s.boss && s.boss.state === 'VULNERABLE') {
-                shakeX = 0; shakeY = 0;
+            // ОТКЛЮЧЕНИЕ ТРЯСКИ ЕСЛИ БОСС УЯЗВИМ ИЛИ ПОБЕЖДЕН
+            if (s.boss && (s.boss.state === 'VULNERABLE' || s.boss.state === 'DEFEATED')) {
+            shakeX = 0; shakeY = 0;
             }
 
             if (document.getElementById('game-over').classList.contains('visible')) {
