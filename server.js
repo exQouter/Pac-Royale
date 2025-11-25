@@ -34,7 +34,7 @@ const SPEED_BOOST_DURATION = 420;
 const SCORE_MILESTONE = 10000;    
 
 // --- КОНФИГУРАЦИЯ БОССА ---
-const BOSS_TRIGGER_SCORE = 2000; 
+const BOSS_TRIGGER_SCORE = 10000; 
 const BOSS_HP_MAX = 3;           
 const BOSS_WIDTH = 90;           
 const BOSS_HEIGHT = 90;          
@@ -93,7 +93,6 @@ function saveLeaderboard() {
 function updateGlobalLeaderboard(name, score) {
     const safeName = (name || "PLAYER").substring(0, 10).toUpperCase().replace(/[<>]/g, "");
     globalLeaderboard.push({ name: safeName, score: parseInt(score) || 0 });
-    globalLeaderboard.sort((a, b) => b.score - a.score);
     globalLeaderboard = globalLeaderboard.slice(0, 10);
     saveLeaderboard();
     io.emit('leaderboardUpdate', globalLeaderboard);
@@ -677,6 +676,7 @@ function handleBossLogic(game) {
             if (pl.x > game.boss.x && pl.x < game.boss.x + BOSS_WIDTH && pl.y > game.boss.y && pl.y < game.boss.y + BOSS_HEIGHT) {
                 pl.score += 5000;
                 game.boss.state = 'DEFEATED';
+                game.boss.attackState = 'WAIT'; // СБРАСЫВАЕМ СТАТУС АТАКИ, ЧТОБЫ УБРАТЬ ТРЯСКУ
                 game.boss.projectiles = []; 
                 
                 // ИЗМЕНЕНИЕ 5: Эффект страха для всех привидений
@@ -688,8 +688,8 @@ function handleBossLogic(game) {
                 
                 setTimeout(() => {
                     game.gameSpeed = CAM_SPEED_START;
-                    game.currentPattern = null; 
-                    game.trainGapRows = 2; // <--- ДОБАВЛЕНО: 2 пустых ряда перед новым лабиринтом
+                    game.currentPattern = null;
+                    game.trainGapRows = 2; // ДОБАВЛЕНО: Безопасный спавн
                     game.boss.state = 'IDLE'; 
                 }, 3000);
             }
@@ -719,6 +719,7 @@ function checkBossCollision(game, lethal) {
             else {
                 pl.score += 5000;
                 game.boss.state = 'DEFEATED';
+                game.boss.attackState = 'WAIT'; // СБРАСЫВАЕМ СТАТУС АТАКИ
                 game.boss.projectiles = []; 
                 
                 // ИЗМЕНЕНИЕ 5: Эффект страха для всех привидений
@@ -731,7 +732,7 @@ function checkBossCollision(game, lethal) {
                 setTimeout(() => {
                     game.gameSpeed = CAM_SPEED_START;
                     game.currentPattern = null; 
-                    game.trainGapRows = 2; // <--- ДОБАВЛЕНО: Буферная зона
+                    game.trainGapRows = 2; // ДОБАВЛЕНО: Безопасный спавн
                     game.boss.state = 'IDLE'; 
                 }, 2000);
             }

@@ -282,25 +282,26 @@
 
             stopBossMusic() { if (this.bossMusicTimer) { clearInterval(this.bossMusicTimer); this.bossMusicTimer = null; } }
             
-            // --- ЗВУК DASH (Charge) ИСПРАВЛЕН: ТРЕУГОЛЬНАЯ ВОЛНА + ФИЛЬТР ---
+            // --- ИСПРАВЛЕНИЕ ЗВУКА: Charge (Нарастание) ---
             playBossCharge() {
                 if(this.isMuted) return;
                 const t = this.ctx.currentTime;
+                // Треугольная волна (мягче пилы)
                 const osc = this.ctx.createOscillator(); 
-                osc.type = 'triangle'; // Используем triangle для более мягкого звука
+                osc.type = 'triangle'; 
                 
-                // Более низкая частота для "глухого" звука
-                osc.frequency.setValueAtTime(80, t); 
-                osc.frequency.linearRampToValueAtTime(300, t + 2.0);
+                // Более низкие частоты (глухой гул)
+                osc.frequency.setValueAtTime(60, t); 
+                osc.frequency.linearRampToValueAtTime(250, t + 2.0);
 
-                // Добавляем фильтр, чтобы убрать высокие частоты
+                // Фильтр срезает "звон"
                 const filter = this.ctx.createBiquadFilter();
                 filter.type = 'lowpass';
-                filter.frequency.setValueAtTime(800, t); 
+                filter.frequency.setValueAtTime(600, t); 
 
                 const g = this.ctx.createGain(); 
                 g.gain.setValueAtTime(0.1, t); 
-                g.gain.linearRampToValueAtTime(0.4, t + 2.0); 
+                g.gain.linearRampToValueAtTime(0.3, t + 2.0); 
                 g.gain.linearRampToValueAtTime(0, t + 2.1);
                 
                 osc.connect(filter);
@@ -311,13 +312,27 @@
                 osc.stop(t + 2.1);
             }
 
+            // --- ИСПРАВЛЕНИЕ ЗВУКА: Dash (Рывок) ---
             playBossDash() {
                 if(this.isMuted) return;
                 const t = this.ctx.currentTime;
-                const noise = this.ctx.createBufferSource(); noise.buffer = this.createNoiseBuffer();
-                const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(3000, t); f.frequency.exponentialRampToValueAtTime(100, t + 0.5);
-                const g = this.ctx.createGain(); g.gain.setValueAtTime(0.8, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
-                noise.connect(f); f.connect(g); g.connect(this.masterGain); noise.start(t);
+                const noise = this.ctx.createBufferSource(); 
+                noise.buffer = this.createNoiseBuffer();
+                
+                const f = this.ctx.createBiquadFilter(); 
+                f.type = 'lowpass'; 
+                // Снижаем частоту фильтра (было 3000 -> стало 1500) для более "тяжелого" звука
+                f.frequency.setValueAtTime(1500, t); 
+                f.frequency.exponentialRampToValueAtTime(50, t + 0.5);
+                
+                const g = this.ctx.createGain(); 
+                g.gain.setValueAtTime(0.6, t); 
+                g.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+                
+                noise.connect(f); 
+                f.connect(g); 
+                g.connect(this.masterGain); 
+                noise.start(t);
             }
 
             playVictory() {
@@ -548,9 +563,15 @@
             if (s.surgeHeight > 0) isShaking = true;
             if (s.train && s.train.state === 'CROSSING') isShaking = true;
             
-            // --- ИСПРАВЛЕНИЕ: Тряска только если босс АКТИВЕН (не побежден) ---
+            // --- Тряска только если босс АКТИВЕН ---
             if (s.boss && s.boss.state === 'ACTIVE') isShaking = true;
             
+            // --- СПЕЦИАЛЬНОЕ УСЛОВИЕ: Отключаем тряску от скоростного режима (sbt), 
+            // если босс побежден или уязвим (чтобы не было тряски "победы") ---
+            if (s.boss && (s.boss.state === 'DEFEATED' || s.boss.state === 'VULNERABLE')) {
+                isShaking = false;
+            }
+
             // УСИЛЕННАЯ ТРЯСКА В WARNING
             if (s.boss && s.boss.state === 'WARNING') {
                 const intensity = (300 - (s.boss.shootTimer || 0)) / 20; 
@@ -559,7 +580,7 @@
                 isShaking = false; 
             }
 
-            if (s.boss && s.boss.attackState === 'CHARGE') {
+            if (s.boss && s.boss.attackState === 'CHARGE' && s.boss.state === 'ACTIVE') {
                 shakeX = (Math.random() - 0.5) * 8;
                 shakeY = (Math.random() - 0.5) * 8;
             } else if (isShaking) { 
@@ -567,10 +588,9 @@
                 shakeY = (Math.random() - 0.5) * 4; 
             }
             
-            // --- ИСПРАВЛЕНИЕ: Полное отключение тряски при уязвимости ИЛИ победе ---
+            // --- ЖЕЛЕЗОБЕТОННОЕ ОТКЛЮЧЕНИЕ ТРЯСКИ ПРИ ПОБЕДЕ ---
             if (s.boss && (s.boss.state === 'VULNERABLE' || s.boss.state === 'DEFEATED')) {
                 shakeX = 0; shakeY = 0;
-                isShaking = false;
             }
 
             if (document.getElementById('game-over').classList.contains('visible')) {
