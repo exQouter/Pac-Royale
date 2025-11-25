@@ -689,6 +689,7 @@ function handleBossLogic(game) {
                 setTimeout(() => {
                     game.gameSpeed = CAM_SPEED_START;
                     game.currentPattern = null; 
+                    game.trainGapRows = 2; // <--- ДОБАВЛЕНО: 2 пустых ряда перед новым лабиринтом
                     game.boss.state = 'IDLE'; 
                 }, 3000);
             }
@@ -730,6 +731,7 @@ function checkBossCollision(game, lethal) {
                 setTimeout(() => {
                     game.gameSpeed = CAM_SPEED_START;
                     game.currentPattern = null; 
+                    game.trainGapRows = 2; // <--- ДОБАВЛЕНО: Буферная зона
                     game.boss.state = 'IDLE'; 
                 }, 2000);
             }
